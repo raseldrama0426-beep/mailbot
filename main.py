@@ -71,7 +71,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     if text == "⬅️ ব্যাক":
-    await start(update, context)
+       await start(update, context)
     return
     user = update.effective_user
     user_id = user.id
