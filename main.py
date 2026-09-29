@@ -17,7 +17,6 @@ def run():
 
 threading.Thread(target=run, daemon=True).start()
 import logging
-import sqlite3
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, CallbackQueryHandler, ConversationHandler, filters
@@ -36,52 +35,8 @@ config = {
     "support_user": "@YourTelegramUsername"
 }
 
+user_balances = {}
 mail_stock = ["test_meta1@gmail.com:pass1", "test_meta2@gmail.com:pass2"]  # আপনার Meta AI ID এর স্টক
-DB_FILE = "bot_database.db"
-
-# ----------------- ডাটাবেজ ফাংশন (SQLite Database) -----------------
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
-            balance REAL DEFAULT 0.0
-        )
-    ''')
-    conn.commit()
-    conn.close()
-
-def get_balance(user_id):
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
-    row = cursor.fetchone()
-    conn.close()
-    if row:
-        return row[0]
-    return 0.0
-
-def update_balance(user_id, new_balance):
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT INTO users (user_id, balance) VALUES (?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET balance = ?
-    ''', (user_id, new_balance, new_balance))
-    conn.commit()
-    conn.close()
-
-def get_total_users():
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM users")
-    count = cursor.fetchone()[0]
-    conn.close()
-    return count
-
-# ডাটাবেজ ইনিশিয়ালাইজেশন
-init_db()
 
 # Conversation states for Deposit
 METHOD, AMOUNT, PROOF = range(3)
@@ -102,9 +57,8 @@ def get_main_keyboard(is_admin=False):
 # ----------------- সাধারণ কমান্ড ও মেসেজ -----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    # ইউজার না থাকলে ডাটাবেজে ০.০ ব্যালেন্স সেট হবে
-    if get_balance(user_id) == 0.0:
-        update_balance(user_id, get_balance(user_id))
+    if user_id not in user_balances:
+        user_balances[user_id] = 0.0
 
     is_admin = (user_id == ADMIN_ID)
     await update.message.reply_text(
@@ -117,7 +71,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user = update.effective_user
     user_id = user.id
-    balance = get_balance(user_id)
+    balance = user_balances.get(user_id, 0.0)
 
     if text == "👤 Profile":
         msg = (
@@ -228,7 +182,7 @@ async def shop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "confirm_meta_ai":
         qty = context.user_data.get('qty', 1)
         total_cost = price * qty
-        balance = get_balance(user_id)
+        balance = user_balances.get(user_id, 0.0)
 
         if len(mail_stock) < qty:
             await query.edit_message_text("❌ **দুঃখিত! পর্যাপ্ত স্টক নেই।**", parse_mode="Markdown")
@@ -241,14 +195,11 @@ async def shop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             purchased = []
             for _ in range(qty):
                 purchased.append(mail_stock.pop(0))
-            
-            # ব্যালেন্স ডাটাবেজে আপডেট
-            new_balance = balance - total_cost
-            update_balance(user_id, new_balance)
+            user_balances[user_id] -= total_cost
 
             items_text = "\n".join([f"`{item}`" for item in purchased])
             await query.edit_message_text(
-                f"✅ **অর্ডার সফল হয়েছে!**\n\n📧 **আপনার Meta AI ID:**\n{items_text}\n\nঅবশিষ্ট ব্যালেন্স: {new_balance:.2f} TK",
+                f"✅ **অর্ডার সফল হয়েছে!**\n\n📧 **আপনার Meta AI ID:**\n{items_text}\n\nঅবশিষ্ট ব্যালেন্স: {user_balances[user_id]:.2f} TK",
                 parse_mode="Markdown"
             )
 
@@ -367,10 +318,7 @@ async def admin_approval_callback(update: Update, context: ContextTypes.DEFAULT_
     amount = float(data[2])
 
     if action == "app":
-        current_bal = get_balance(target_user_id)
-        new_bal = current_bal + amount
-        update_balance(target_user_id, new_bal)  # ডাটাবেজে স্থায়ীভাবে সেভ
-
+        user_balances[target_user_id] = user_balances.get(target_user_id, 0.0) + amount
         if query.message.photo:
             await query.edit_message_caption(
                 caption=query.message.caption + f"\n\n✅ **APPROVED by Admin!** (+{amount} TK)",
@@ -385,7 +333,7 @@ async def admin_approval_callback(update: Update, context: ContextTypes.DEFAULT_
         try:
             await context.bot.send_message(
                 chat_id=target_user_id,
-                text=f"🎉 **আপনার {amount} TK ডিপোজিট এপ্রুভ করা হয়েছে!**\nনতুন ব্যালেন্স: {new_bal:.2f} TK",
+                text=f"🎉 **আপনার {amount} TK ডিপোজিট এপ্রুভ করা হয়েছে!**\nনতুন ব্যালেন্স: {user_balances[target_user_id]:.2f} TK",
                 parse_mode="Markdown"
             )
         except Exception:
@@ -420,7 +368,7 @@ async def admin_panel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "⚙️ **ADMIN PANEL COMMANDS**\n\n"
         "📥 `/addstock email:pass` - স্টকে মেইল যোগ করুন\n"
         "💰 `/addbalance USER_ID AMOUNT` - কোনো ইউজারকে ডিরেক্ট টাকা দিন\n"
-        "📊 `/adminstats` - কারেন্ট স্টক ও ইউজার সংখ্যা দেখুন"
+        "📊 `/adminstats` - কারেন্ট স্টক ও ইউজার লিস্ট দেখুন"
     )
     await update.message.reply_text(msg, parse_mode="Markdown")
 
@@ -440,12 +388,8 @@ async def add_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         target_id = int(context.args[0])
         amount = float(context.args[1])
-        
-        current_bal = get_balance(target_id)
-        new_bal = current_bal + amount
-        update_balance(target_id, new_bal)  # ডাটাবেজে আপডেট
-        
-        await update.message.reply_text(f"✅ ইউজার `{target_id}`-কে {amount} TK এড করা হয়েছে। নতুন ব্যালেন্স: {new_bal:.2f} TK", parse_mode="Markdown")
+        user_balances[target_id] = user_balances.get(target_id, 0.0) + amount
+        await update.message.reply_text(f"✅ ইউজার `{target_id}`-কে {amount} TK এড করা হয়েছে।", parse_mode="Markdown")
     except Exception:
         await update.message.reply_text("⚠️ নিয়ম: `/addbalance USER_ID AMOUNT`", parse_mode="Markdown")
 
@@ -455,7 +399,7 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
         f"📊 **বটের বর্তমান অবস্থা:**\n\n"
         f"📦 **মোট Meta AI ID স্টক:** {len(mail_stock)} টি\n"
-        f"👥 **মোট ডাটাবেজ ইউজার:** {get_total_users()} জন"
+        f"👥 **মোট ইউজার:** {len(user_balances)} জন"
     )
     await update.message.reply_text(msg, parse_mode="Markdown")
 
