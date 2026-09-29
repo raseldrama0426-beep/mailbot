@@ -95,8 +95,10 @@ elif text == "🏦 Deposit":
         "📌 টাকা পাঠানোর পর Transaction ID পাঠাবে।"
     )
     await update.message.reply_text(deposit_text, parse_mode="Markdown")    
-      price = config["mail_price"]
-        if len(mail_stock) == 0:
+
+elif text == "💲 Buy Product":
+     price = config["mail_price"]
+     if len(mail_stock) == 0:
             await update.message.reply_text("❌ দুঃখিত! বর্তমানে স্টকে কোনো মেইল নেই।")
         elif balance < price:
             await update.message.reply_text(
