@@ -70,9 +70,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
-    if text == "⬅️ ব্যাক":
-       await start(update, context)
-       return
     user = update.effective_user
     user_id = user.id
     balance = user_balances.get(user_id, 0.0)
@@ -86,19 +83,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await update.message.reply_text(msg, parse_mode="Markdown")
 
-elif text == "🏦 Deposit":
-    deposit_text = (
-        "💳 **ডিপোজিট করার তথ্য:**\n\n"
-        "📱 **bKash (Personal):** `01766872406`\n"
-        "📱 **Nagad (Personal):** `01821826206`\n"
-        "📱 **Rocket (Personal):** `01766872406`\n\n"
-        "📌 টাকা পাঠানোর পর Transaction ID পাঠাবে।"
-    )
-    await update.message.reply_text(deposit_text, parse_mode="Markdown")    
-
-elif text == "💲 Buy Product":
-     price = config["mail_price"]
-     if len(mail_stock) == 0:
+    elif text == "💲 Buy Product":
+        price = config["mail_price"]
+        if len(mail_stock) == 0:
             await update.message.reply_text("❌ দুঃখিত! বর্তমানে স্টকে কোনো মেইল নেই।")
         elif balance < price:
             await update.message.reply_text(
@@ -117,10 +104,9 @@ elif text == "💲 Buy Product":
                 parse_mode="Markdown"
             )
 
-    elif tuser== "💬 Support":
+    elif text == "💬 Support":
         await update.message.reply_text(f"💬 সহায়তার জন্য যোগাযোগ করুন: {config['support_user']}")
-    elif text == "🏦 Deposit" or text == "Deposit" or "Deposit" in text:
-        await deposit_start(update, context)
+
     elif text == "⚙️ Admin Panel" and user_id == ADMIN_ID:
         await admin_panel_cmd(update, context)
 
@@ -355,7 +341,8 @@ if __name__ == "__main__":
     app.add_handler(dep_handler)
     app.add_handler(CallbackQueryHandler(admin_approval_callback, pattern="^(app_|rej_)"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-# Broadcast command function
+
+    # Broadcast command function
 async def broadcast_command(update, context):
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
