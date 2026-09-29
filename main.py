@@ -72,7 +72,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     if text == "⬅️ ব্যাক":
        await start(update, context)
-    return
+       return
     user = update.effective_user
     user_id = user.id
     balance = user_balances.get(user_id, 0.0)
@@ -86,8 +86,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await update.message.reply_text(msg, parse_mode="Markdown")
 
-    elif text == "💲 Buy Product":
-    elif text == "🏦 Deposit":
+elif text == "🏦 Deposit":
     deposit_text = (
         "💳 **ডিপোজিট করার তথ্য:**\n\n"
         "📱 **bKash (Personal):** `01766872406`\n"
