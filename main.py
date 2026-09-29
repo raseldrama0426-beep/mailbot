@@ -26,7 +26,7 @@ ADMIN_ID = 7792142088               # Telegram Admin User ID (Number)
 
 BKASH_NUMBER, NAGAD_NUMBER, ROCKET_NUMBER = "01766872406", "01821826206", "01766872406"
 MIN_DEPOSIT, DB_FILE = 20.0, "bot_database.db"
-mail_stock, support_user = ["kelli.731@piepla.com:rasel24", "michal@piepla.com:rasel24"], "@YourTelegramUsername"
+mail_stock, support_user = ["kelli.731@piepla.com:rasel24", "michal@piepla.com:rasel24"], "@earnikzone"
 unit_price = 0.80  # Default Mail Price
 METHOD, AMOUNT, PROOF = range(3)
 
