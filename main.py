@@ -466,4 +466,4 @@ async def broadcast_command(update, context):
 app.add_handler(CommandHandler("broadcast", broadcast_command))
 
 print("Bot is running with SQLite database...")
-    app.run_polling()
+app.run_polling()
