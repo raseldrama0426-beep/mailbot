@@ -24,7 +24,7 @@ from telegram.ext import (
 
 # ----------------- কনফিগারেশন (আপনার তথ্য বসান) -----------------
 BOT_TOKEN = "8803998786:AAETJSRZPzcu6aUI1q914TvA5jcNw3Mrw0A"  # BotFather এর টোকেন বসান
-ADMIN_ID = 7792142088            # আপনার Telegram User ID (Number) বসান
+ADMIN_ID = 7792142088             # আপনার Telegram User ID (Number) বসান
 
 BKASH_NUMBER = "01766872406"
 NAGAD_NUMBER = "01821826206"
@@ -32,12 +32,11 @@ ROCKET_NUMBER = "01766872406"
 MIN_DEPOSIT = 20.0  # সর্বনিম্ন ডিপোজিট টাকা
 
 config = {
-    "mail_price": 1.0,
     "support_user": "@YourTelegramUsername"
 }
 
 user_balances = {}
-mail_stock = ["test_email1@gmail.com:pass1", "test_email2@gmail.com:pass2"]  # স্টক লিস্ট
+mail_stock = ["test_meta1@gmail.com:pass1", "test_meta2@gmail.com:pass2"]  # আপনার Meta AI ID এর স্টক
 
 # Conversation states for Deposit
 METHOD, AMOUNT, PROOF = range(3)
@@ -84,16 +83,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(msg, parse_mode="Markdown")
 
     elif text == "💲 Buy Product":
+        context.user_data['qty'] = 1  # ডিফল্ট পরিমাণ ১
+        price = 0.80                  # Meta AI ID এর দাম
+        stock = len(mail_stock)
+        qty = context.user_data['qty']
+        total = price * qty
+
         keyboard = [
-            [InlineKeyboardButton("🌐 ALL VPN", callback_data="cat_vpn")],
-            [InlineKeyboardButton("✉️ Trusted Mail", callback_data="cat_mail")],
-            [InlineKeyboardButton("🔌 Proxy", callback_data="cat_proxy")]
+            [
+                InlineKeyboardButton("➖", callback_data="qty_dec"),
+                InlineKeyboardButton(f"{qty}", callback_data="qty_val"),
+                InlineKeyboardButton("➕", callback_data="qty_inc")
+            ],
+            [
+                InlineKeyboardButton("Confirm Order", callback_data="confirm_meta_ai"),
+                InlineKeyboardButton("Cancel", callback_data="cancel_meta_ai")
+            ]
         ]
-        await update.message.reply_text(
-            "💲 **কী কিনতে চান? নিচের ক্যাটাগরি থেকে পছন্দ করুন:**",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="Markdown"
+        text_msg = (
+            f"💲 **Meta AI ID**\n"
+            f"💰 **প্রাইস:** {price:.2f} TK\n"
+            f"📦 **স্টক:** {stock}\n\n"
+            f"পরিমাণ: {qty}\n"
+            f"মোট খরচ: {total:.2f} TK"
         )
+        await update.message.reply_text(text_msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
     elif text == "💬 Support":
         await update.message.reply_text(f"💬 সহায়তার জন্য যোগাযোগ করুন: {config['support_user']}")
@@ -101,58 +115,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == "⚙️ Admin Panel" and user_id == ADMIN_ID:
         await admin_panel_cmd(update, context)
 
-# ----------------- ইনলাইন শপিং ক্যাটাগরি ও কোয়ান্টিটি হ্যান্ডলার -----------------
+# ----------------- Meta AI ID কেনাকাটা ও কোয়ান্টিটি হ্যান্ডলার -----------------
 async def shop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
     user_id = query.from_user.id
 
-    # ১. ক্যাটাগরি সিলেক্ট (Trusted Mail)
-    if data == "cat_mail":
-        keyboard = [
-            [InlineKeyboardButton(f"Outlook fr | 1.00 TK | Stock: {len(mail_stock)}", callback_data="prod_outlook")],
-            [InlineKeyboardButton(f"Hotmail | 1.00 TK | Stock: {len(mail_stock)}", callback_data="prod_hotmail")],
-            [InlineKeyboardButton(f"Meta AI ID | 0.80 TK | Stock: {len(mail_stock)}", callback_data="prod_meta_ai")],
-            [InlineKeyboardButton("⬅️ Back", callback_data="back_to_cat")]
-        ]
-        await query.edit_message_text(
-            "🛍️️ **Trusted Mail প্রোডাক্ট সিলেক্ট করুন:**",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="Markdown"
-        )
+    price = 0.80
+    stock = len(mail_stock)
 
-    # ২. প্রোডাক্ট সিলেক্ট (Meta AI ID)
-    elif data == "prod_meta_ai":
-        context.user_data['qty'] = 1
-        price = 0.80
-        stock = len(mail_stock)
-        qty = context.user_data['qty']
-        total = price * qty
-
-        keyboard = [
-            [
-                InlineKeyboardButton("➖", callback_data="qty_dec"),
-                InlineKeyboardButton(f"{qty}", callback_data="qty_val"),
-                InlineKeyboardButton("➕", callback_data="qty_inc")
-            ],
-            [InlineKeyboardButton("Confirm Order", callback_data="confirm_meta_ai"), InlineKeyboardButton("Cancel", callback_data="back_to_cat")]
-        ]
-        text = (
-            f"💲 **Meta AI ID**\n"
-            f"💰 **প্রাইস:** {price:.2f} TK\n"
-            f"📦 **স্টক:** {stock}\n\n"
-            f"পরিমাণ: {qty}\n"
-            f"মোট খরচ: {total:.2f} TK"
-        )
-        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
-
-    # ৩. কোয়ান্টিটি বাড়ান (+)
-    elif data == "qty_inc":
+    # ১. কোয়ান্টিটি বাড়ান (+)
+    if data == "qty_inc":
         context.user_data['qty'] = context.user_data.get('qty', 1) + 1
         qty = context.user_data['qty']
-        price = 0.80
-        stock = len(mail_stock)
         total = price * qty
 
         keyboard = [
@@ -161,24 +137,25 @@ async def shop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton(f"{qty}", callback_data="qty_val"),
                 InlineKeyboardButton("➕", callback_data="qty_inc")
             ],
-            [InlineKeyboardButton("Confirm Order", callback_data="confirm_meta_ai"), InlineKeyboardButton("Cancel", callback_data="back_to_cat")]
+            [
+                InlineKeyboardButton("Confirm Order", callback_data="confirm_meta_ai"),
+                InlineKeyboardButton("Cancel", callback_data="cancel_meta_ai")
+            ]
         ]
-        text = (
+        text_msg = (
             f"💲 **Meta AI ID**\n"
             f"💰 **প্রাইস:** {price:.2f} TK\n"
             f"📦 **স্টক:** {stock}\n\n"
             f"পরিমাণ: {qty}\n"
             f"মোট খরচ: {total:.2f} TK"
         )
-        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+        await query.edit_message_text(text_msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
-    # ৪. কোয়ান্টিটি কমান (-)
+    # ২. কোয়ান্টিটি কমান (-)
     elif data == "qty_dec":
         if context.user_data.get('qty', 1) > 1:
             context.user_data['qty'] -= 1
         qty = context.user_data['qty']
-        price = 0.80
-        stock = len(mail_stock)
         total = price * qty
 
         keyboard = [
@@ -187,21 +164,23 @@ async def shop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton(f"{qty}", callback_data="qty_val"),
                 InlineKeyboardButton("➕", callback_data="qty_inc")
             ],
-            [InlineKeyboardButton("Confirm Order", callback_data="confirm_meta_ai"), InlineKeyboardButton("Cancel", callback_data="back_to_cat")]
+            [
+                InlineKeyboardButton("Confirm Order", callback_data="confirm_meta_ai"),
+                InlineKeyboardButton("Cancel", callback_data="cancel_meta_ai")
+            ]
         ]
-        text = (
+        text_msg = (
             f"💲 **Meta AI ID**\n"
             f"💰 **প্রাইস:** {price:.2f} TK\n"
             f"📦 **স্টক:** {stock}\n\n"
             f"পরিমাণ: {qty}\n"
             f"মোট খরচ: {total:.2f} TK"
         )
-        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+        await query.edit_message_text(text_msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
-    # ৫. অর্ডার কনফার্ম করা
+    # ৩. অর্ডার কনফার্ম করা
     elif data == "confirm_meta_ai":
         qty = context.user_data.get('qty', 1)
-        price = 0.80
         total_cost = price * qty
         balance = user_balances.get(user_id, 0.0)
 
@@ -220,22 +199,13 @@ async def shop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             items_text = "\n".join([f"`{item}`" for item in purchased])
             await query.edit_message_text(
-                f"✅ **অর্ডার সফল হয়েছে!**\n\n📧 **আপনার আইটেমস:**\n{items_text}\n\nঅবশিষ্ট ব্যালেন্স: {user_balances[user_id]:.2f} TK",
+                f"✅ **অর্ডার সফল হয়েছে!**\n\n📧 **আপনার Meta AI ID:**\n{items_text}\n\nঅবশিষ্ট ব্যালেন্স: {user_balances[user_id]:.2f} TK",
                 parse_mode="Markdown"
             )
 
-    # ৬. মেইন ক্যাটাগরিতে ফেরত
-    elif data == "back_to_cat":
-        keyboard = [
-            [InlineKeyboardButton("🌐 ALL VPN", callback_data="cat_vpn")],
-            [InlineKeyboardButton("✉️ Trusted Mail", callback_data="cat_mail")],
-            [InlineKeyboardButton("🔌 Proxy", callback_data="cat_proxy")]
-        ]
-        await query.edit_message_text(
-            "💲 **কী কিনতে চান? নিচের ক্যাটাগরি থেকে পছন্দ করুন:**",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="Markdown"
-        )
+    # ৪. ক্যানসেল করা
+    elif data == "cancel_meta_ai":
+        await query.edit_message_text("❌ অর্ডার বাতিল করা হয়েছে।")
 
 # ----------------- ডিপোজিট প্রসেস (Deposit Flow) -----------------
 async def deposit_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -398,7 +368,6 @@ async def admin_panel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "⚙️ **ADMIN PANEL COMMANDS**\n\n"
         "📥 `/addstock email:pass` - স্টকে মেইল যোগ করুন\n"
         "💰 `/addbalance USER_ID AMOUNT` - কোনো ইউজারকে ডিরেক্ট টাকা দিন\n"
-        "🏷️ `/setprice 15` - মেইলের দাম চেঞ্জ করুন\n"
         "📊 `/adminstats` - কারেন্ট স্টক ও ইউজার লিস্ট দেখুন"
     )
     await update.message.reply_text(msg, parse_mode="Markdown")
@@ -409,7 +378,7 @@ async def add_stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.args:
         mail_data = " ".join(context.args)
         mail_stock.append(mail_data)
-        await update.message.reply_text(f"✅ স্টকে মেইল যোগ হয়েছে! বর্তমান মোট স্টক: {len(mail_stock)}")
+        await update.message.reply_text(f"✅ স্টকে Meta AI ID যোগ হয়েছে! বর্তমান মোট স্টক: {len(mail_stock)}")
     else:
         await update.message.reply_text("⚠️ নিয়ম: `/addstock email:password`", parse_mode="Markdown")
 
@@ -424,23 +393,13 @@ async def add_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         await update.message.reply_text("⚠️ নিয়ম: `/addbalance USER_ID AMOUNT`", parse_mode="Markdown")
 
-async def set_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return
-    try:
-        config["mail_price"] = float(context.args[0])
-        await update.message.reply_text(f"✅ নতুন মেইল প্রাইস: {config['mail_price']} TK")
-    except Exception:
-        await update.message.reply_text("⚠️ নিয়ম: `/setprice 15`", parse_mode="Markdown")
-
 async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
     msg = (
         f"📊 **বটের বর্তমান অবস্থা:**\n\n"
-        f"📦 **মোট স্টক:** {len(mail_stock)} টি\n"
-        f"👥 **মোট ইউজার:** {len(user_balances)} জন\n"
-        f"🏷️ **মেইলের বর্তমান দাম:** {config['mail_price']} TK"
+        f"📦 **মোট Meta AI ID স্টক:** {len(mail_stock)} টি\n"
+        f"👥 **মোট ইউজার:** {len(user_balances)} জন"
     )
     await update.message.reply_text(msg, parse_mode="Markdown")
 
@@ -462,13 +421,12 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("admin", admin_panel_cmd))
     app.add_handler(CommandHandler("addstock", add_stock))
     app.add_handler(CommandHandler("addbalance", add_balance))
-    app.add_handler(CommandHandler("setprice", set_price))
     app.add_handler(CommandHandler("adminstats", admin_stats))
 
     app.add_handler(dep_handler)
     
-    # শপিং বাটন প্রসেস হ্যান্ডলার (ক্যাটাগরি, স্টক ও কোয়ান্টিটি)
-    app.add_handler(CallbackQueryHandler(shop_callback, pattern="^(cat_|prod_|qty_|confirm_|back_to_)"))
+    # Meta AI ID কেনাকাটা প্রসেস হ্যান্ডলার
+    app.add_handler(CallbackQueryHandler(shop_callback, pattern="^(qty_|confirm_|cancel_)"))
     
     # এডমিন এপ্রুভাল হ্যান্ডলার
     app.add_handler(CallbackQueryHandler(admin_approval_callback, pattern="^(app_|rej_)"))
