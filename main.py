@@ -342,6 +342,37 @@ if __name__ == "__main__":
     app.add_handler(dep_handler)
     app.add_handler(CallbackQueryHandler(admin_approval_callback, pattern="^(app_|rej_)"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+# Broadcast command function
+async def broadcast_command(update, context):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        return
 
-    print("Bot is running...")
-    app.run_polling()
+    if not context.args:
+        await update.message.reply_text("⚠️ ব্যবহার করার নিয়ম:\n`/broadcast আপনার বার্তা`", parse_mode="Markdown")
+        return
+
+    broadcast_text = " ".join(context.args)
+    success_count = 0
+    fail_count = 0
+
+    status_msg = await update.message.reply_text("📢 ব্রডকাস্ট পাঠানো শুরু হচ্ছে...")
+
+    for uid in all_users:
+        try:
+            await context.bot.send_message(chat_id=uid, text=f"📢 **ADMIN NOTICE** 📢\n\n{broadcast_text}", parse_mode="Markdown")
+            success_count += 1
+        except Exception:
+            fail_count += 1
+
+    await status_msg.edit_text(
+        f"✅ **ব্রডকাস্ট সম্পন্ন হয়েছে!**\n\n"
+        f"🎯 সফল: {success_count} জন\n"
+        f"❌ ব্যর্থ/ব্লকড: {fail_count} জন",
+        parse_mode="Markdown"
+    )
+
+app.add_handler(CommandHandler("broadcast", broadcast_command))
+
+print("Bot is running...")
+app.run_polling()
