@@ -106,8 +106,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif text == "💬 Support":
         await update.message.reply_text(f"💬 সহায়তার জন্য যোগাযোগ করুন: {config['support_user']}")
-
-    elif text == "⚙️ Admin Panel" and user_id == ADMIN_ID:
+  elif text == "💳 Deposit" or text == "Deposit":
+  await deposit_start(update, context)
+   elif text == "⚙️ Admin Panel" and user_id == ADMIN_ID:
         await admin_panel_cmd(update, context)
 
 # ----------------- ডিপোজিট প্রসেস (Deposit Flow) -----------------
