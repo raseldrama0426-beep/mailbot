@@ -40,12 +40,16 @@ threading.Thread(target=run_flask, daemon=True).start()
 BOT_TOKEN = "8803998786:AAETJSRZPzcu6aUI1q914TvA5jcNw3Mrw0A"  # Apnar Bot Token
 ADMIN_ID = 7792142088                                      # Admin ID
 
+# Channel Settings
+CHANNEL_USERNAME = "@facebookmarketing077"
+CHANNEL_LINK = "https://t.me/facebookmarketing077"
+
 # Payment Numbers
 BKASH_NUMBER = "01766872406"
 NAGAD_NUMBER = "01821826206"
 ROCKET_NUMBER = "01766872406"
 
-# Payment Logo URLs (High Quality Images)
+# Payment Logo URLs
 BKASH_LOGO = "https://i.ibb.co/L5QxZ2k/bkash-logo.jpg"
 NAGAD_LOGO = "https://i.ibb.co/Bsn4R44/nagad-logo.jpg"
 ROCKET_LOGO = "https://i.ibb.co/hK8bQzL/rocket-logo.jpg"
@@ -106,9 +110,50 @@ MENU_BUTTONS = [
     "🏦 ডিপোজিট", "🏦 Deposit", "💳 Deposit"
 ]
 
+# ----------------- Force Subscribe Check -----------------
+async def is_subscribed(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    try:
+        member = await context.bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
+        if member.status in ['creator', 'administrator', 'member']:
+            return True
+        return False
+    except Exception as e:
+        logging.error(f"Force Sub Check Error: {e}")
+        return True  # Bot admin na thakle pass kore dibe
+
+async def send_sub_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    kbd = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📢 Join Channel", url=CHANNEL_LINK)],
+        [InlineKeyboardButton("✅ Verify", callback_data="verify_sub")]
+    ])
+    txt = "🚀 **বটটি ব্যবহার করতে আপনাকে আমাদের চ্যানেলে জয়েন হতে হবে!**\n\nনিচের বাটনে ক্লিক করে জয়েন করুন এবং **Verify** এ চাপ দিন।"
+    if update.callback_query:
+        await update.callback_query.answer("❌ আপনি এখনো জয়েন করেননি!", show_alert=True)
+    elif update.message:
+        await update.message.reply_text(txt, reply_markup=kbd, parse_mode="Markdown")
+
+async def verify_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    uid = q.from_user.id
+    if await is_subscribed(uid, context):
+        await q.answer("✅ ভেরিফিকেশন সফল হয়েছে!")
+        await q.message.delete()
+        await context.bot.send_message(
+            chat_id=uid,
+            text="🎉 **ধন্যবাদ!** আপনি সফলভাবে ভেরিফাইড হয়েছেন। নিচের মেনু ব্যবহার করতে পারেন:",
+            reply_markup=get_kbd(uid == ADMIN_ID),
+            parse_mode="Markdown"
+        )
+    else:
+        await q.answer("❌ আপনি এখনো জয়েন করেননি! আগে জয়েন করুন।", show_alert=True)
+
 # ----------------- Core Commands -----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
+    if not await is_subscribed(uid, context):
+        await send_sub_msg(update, context)
+        return
+
     if get_bal(uid) == 0.0:
         set_bal(uid, 0.0)
     
@@ -119,9 +164,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg, reply_markup=get_kbd(uid == ADMIN_ID), parse_mode="Markdown")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
     user = update.effective_user
     uid = user.id
+
+    if not await is_subscribed(uid, context):
+        await send_sub_msg(update, context)
+        return
+
+    text = update.message.text
     
     if context.user_data.get('waiting_qty'):
         if text in MENU_BUTTONS:
@@ -196,6 +246,10 @@ async def shop_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     data = query.data
     uid = query.from_user.id
+
+    if not await is_subscribed(uid, context):
+        await send_sub_msg(update, context)
+        return
     
     if data == "qty_inc":
         context.user_data['qty'] = context.user_data.get('qty', 1) + 1
@@ -238,8 +292,13 @@ async def shop_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "cancel_buy":
         await query.edit_message_text("❌ অর্ডার বাতিল করা হয়েছে।")
 
-# ----------------- Deposit System (With Official Logos) -----------------
+# ----------------- Deposit System -----------------
 async def dep_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    if not await is_subscribed(uid, context):
+        await send_sub_msg(update, context)
+        return ConversationHandler.END
+
     kbd = InlineKeyboardMarkup([
         [InlineKeyboardButton("bKash", callback_data="d_bkash"), InlineKeyboardButton("Nagad", callback_data="d_nagad")],
         [InlineKeyboardButton("Rocket", callback_data="d_rocket")],
@@ -441,7 +500,7 @@ async def import_sheet(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await update.message.reply_text("❌ Sheet লোড হয়নি! লিঙ্ক শেয়ার অপশন **'Anyone with the link'** করা আছে কিনা নিশ্চিত করুন।")
     except Exception as e:
-        await update.message.reply_text(f"⚠️ ত্রুটি: {str(e)}")
+        await update.message.reply_text(f"⚠️️ ত্রুটি: {str(e)}")
 
 async def add_stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == ADMIN_ID and context.args:
@@ -457,7 +516,7 @@ async def add_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
             set_bal(uid, new_bal)
             await update.message.reply_text(f"✅ ইউজার `{uid}` এর নতুন ব্যালেন্স: `{new_bal:.2f}` টাকা", parse_mode="Markdown")
         except ValueError:
-            await update.message.reply_text("⚠️ ব্যবহার করার নিয়ম: `/addbalance USER_ID AMOUNT`", parse_mode="Markdown")
+            await update.message.reply_text("⚠️️ ব্যবহার করার নিয়ম: `/addbalance USER_ID AMOUNT`", parse_mode="Markdown")
 
 async def set_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global unit_price
@@ -537,6 +596,7 @@ if __name__ == "__main__":
         ]
     )
 
+    app.add_handler(CallbackQueryHandler(verify_cb, pattern="^verify_sub$"))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("importsheet", import_sheet))
     app.add_handler(CommandHandler("addstock", add_stock))
@@ -550,5 +610,5 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(admin_cb, pattern="^(app_|rej_)"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    print("Bot is running with SQLite database & Payment Logos...")
+    print("Bot is running with Channel Force Join Verification...")
     app.run_polling()
