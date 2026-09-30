@@ -19,7 +19,6 @@ from telegram.ext import (
     ContextTypes,
     MessageHandler,
     CallbackQueryHandler,
-    ConversationHandler,
     filters
 )
 
@@ -52,9 +51,6 @@ DB_FILE = os.path.join(os.getcwd(), "bot_database.db")
 mail_stock = ["kelli.731@piepla.com:rasel24", "michal@piepla.com:rasel24"]
 support_user = "@PremiumStoreBD_Support"  # Support ID
 unit_price = 0.80  # Per Mail Price
-
-# Conversation States
-METHOD, AMOUNT, PROOF = range(3)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -93,10 +89,9 @@ def get_kbd(is_admin):
         kbd.append([KeyboardButton("⚙️ এডমিন প্যানেল")])
     return ReplyKeyboardMarkup(kbd, resize_keyboard=True)
 
-MENU_REGEX = r'(প্রোফাইল|profile|প্রডাক্ট|product|সাপোর্ট|support|এডমিন|admin|ডিপোজিট|deposit)'
-
 # ----------------- Core Commands -----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()  # Clear any old stuck states!
     uid = update.effective_user.id
     if get_bal(uid) == 0.0:
         set_bal(uid, 0.0)
@@ -123,41 +118,131 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_support(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"💬 **আমাদের সাপোর্ট টিম:** {support_user}\n\nযেকোনো সহায়তার জন্য মেসেজ দিন।", parse_mode="Markdown")
 
-# Centralized Handler for all button clicks & text messages
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.lower()
-    user = update.effective_user
-    uid = user.id
-    
-    # Custom Quantity input processing
-    if context.user_data.get('waiting_qty'):
-        if re.search(MENU_REGEX, text):
-            context.user_data['waiting_qty'] = False
-        elif update.message.text.isdigit() and int(update.message.text) > 0:
-            context.user_data['qty'] = int(update.message.text)
-            context.user_data['waiting_qty'] = False
-            await send_shop_menu(update.message, context, is_edit=False)
-            return
-        else:
-            await update.message.reply_text("⚠️ অনুগ্রহ করে সঠিক একটি সংখ্যা লিখুন:")
-            return
+async def start_deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['state'] = 'DEP_METHOD'
+    kbd = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🟢 bKash", callback_data="d_bkash"), InlineKeyboardButton("🔴 Nagad", callback_data="d_nagad")],
+        [InlineKeyboardButton("🟣 Rocket", callback_data="d_rocket")],
+        [InlineKeyboardButton("❌ বাতিল করুন", callback_data="cancel_dep")]
+    ])
+    msg = (
+        "🏦 **ডিপোজিট সিস্টেম**\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"💡 সর্বনিম্ন ডিপোজিট: **{MIN_DEPOSIT:.0f} টাকা**\n\n"
+        "অনুগ্রহ করে আপনার পছন্দের **Payment Method** সিলেক্ট করুন:"
+    )
+    await update.message.reply_text(msg, reply_markup=kbd, parse_mode="Markdown")
 
-    # Match based on core keywords (ignores emojis and special symbols)
-    if "প্রোফাইল" in text or "profile" in text:
+# ----------------- Main Direct Event Router -----------------
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
+        return
+
+    raw_text = update.message.text
+    text = raw_text.lower().strip()
+    uid = update.effective_user.id
+
+    # 1. HIGHEST PRIORITY: Main Keyboard Menu Clicks (ALWAYS RESET & EXECUTE)
+    if "প্রোফাইল" in raw_text or "profile" in text:
+        context.user_data.clear()
         await show_profile(update, context)
-        
-    elif "প্রডাক্ট" in text or "product" in text or "কিনুন" in text or "buy" in text:
+        return
+
+    elif "সাপোর্ট" in raw_text or "support" in text:
+        context.user_data.clear()
+        await show_support(update, context)
+        return
+
+    elif "প্রডাক্ট" in raw_text or "product" in text or "কিনুন" in raw_text or "buy" in text:
+        context.user_data.clear()
         if not mail_stock:
             await update.message.reply_text("❌ দুঃখিত! বর্তমানে স্টকে কোনো মেইল নেই।")
             return
         context.user_data['qty'] = 1
         await send_shop_menu(update.message, context, is_edit=False)
-        
-    elif "সাপোর্ট" in text or "support" in text:
-        await show_support(update, context)
-        
-    elif ("এডমিন" in text or "admin" in text) and uid == ADMIN_ID:
+        return
+
+    elif "ডিপোজিট" in raw_text or "deposit" in text:
+        context.user_data.clear()
+        await start_deposit(update, context)
+        return
+
+    elif ("এডমিন" in raw_text or "admin" in text) and uid == ADMIN_ID:
+        context.user_data.clear()
         await admin_panel(update, context)
+        return
+
+    # 2. SECONDARY PRIORITY: Input Collection States
+    state = context.user_data.get('state')
+
+    if state == 'WAITING_QTY':
+        if raw_text.isdigit() and int(raw_text) > 0:
+            context.user_data['qty'] = int(raw_text)
+            context.user_data['state'] = None
+            await send_shop_menu(update.message, context, is_edit=False)
+        else:
+            await update.message.reply_text("⚠️ অনুগ্রহ করে সঠিক একটি সংখ্যা লিখুন:")
+        return
+
+    elif state == 'DEP_AMOUNT':
+        try:
+            amt = float(raw_text)
+            if amt < MIN_DEPOSIT:
+                await update.message.reply_text(f"❌ সর্বনিম্ন ডিপোজিট **{MIN_DEPOSIT:.0f} টাকা**। অনুগ্রহ করে সঠিক পরিমাণ লিখুন:")
+                return
+            context.user_data['dep_a'] = amt
+            context.user_data['state'] = 'DEP_PROOF'
+            m = context.user_data.get('dep_m', 'bkash')
+            num = BKASH_NUMBER if m == "bkash" else (NAGAD_NUMBER if m == "nagad" else ROCKET_NUMBER)
+            method_name = "bKash" if m == "bkash" else ("Nagad" if m == "nagad" else "Rocket")
+            instructions = (
+                f"📥 **{method_name} Personal Number:** `{num}`\n"
+                "━━━━━━━━━━━━━━━━━━━\n"
+                f"💵 মোট জমার পরিমাণ: **{amt:.2f} টাকা**\n\n"
+                "📌 **নির্দেশনা:**\n"
+                f"১. উপরের নম্বরে **Send Money** করুন।\n"
+                "২. টাকা পাঠানোর পর পাওয়া **Transaction ID (TrxID)** অথবা পেমেন্টের **স্ক্রিনশট** এখানে মেসেজ দিন।"
+            )
+            await update.message.reply_text(instructions, parse_mode="Markdown")
+        except ValueError:
+            await update.message.reply_text("❌ অনুগ্রহ করে শুধু সংখ্যার মাধ্যমে টাকার পরিমাণ লিখুন (যেমন: 50):")
+        return
+
+    elif state == 'DEP_PROOF':
+        await process_dep_proof(update, context)
+        return
+
+async def process_dep_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    u = update.effective_user
+    a = context.user_data.get('dep_a', 0.0)
+    m = context.user_data.get('dep_m', 'bkash')
+
+    if not update.message.photo:
+        trx_text = update.message.text.strip()
+        if len(trx_text) < 6 or " " in trx_text or len(trx_text) > 20:
+            await update.message.reply_text(
+                "❌ **ভুল Transaction ID!**\n\n"
+                "অনুগ্রহ করে পেমেন্ট শেষ করার পর প্রাপ্ত সঠিক TrxID অথবা পেমেন্টের স্ক্রিনশট পাঠান।"
+            )
+            return
+
+    context.user_data.clear()  # Done with deposit proof, clear state
+    kbd = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Approve", callback_data=f"app_{u.id}_{a}"), InlineKeyboardButton("❌ Reject", callback_data=f"rej_{u.id}_{a}")]
+    ])
+    txt = (
+        f"📥 **নতুন ডিপোজিট রিকোয়েস্ট**\n"
+        f"👤 ইউজার: {u.first_name} (`{u.id}`)\n"
+        f"💳 মাধ্যম: {m.upper()}\n"
+        f"💰 পরিমাণ: {a:.2f} টাকা"
+    )
+    
+    if update.message.photo:
+        await context.bot.send_photo(ADMIN_ID, photo=update.message.photo[-1].file_id, caption=txt, reply_markup=kbd, parse_mode="Markdown")
+    else:
+        await context.bot.send_message(ADMIN_ID, text=f"{txt}\n🔑 TrxID: `{update.message.text.strip()}`", reply_markup=kbd, parse_mode="Markdown")
+    
+    await update.message.reply_text("✅ আপনার ডিপোজিট তথ্য জমা হয়েছে! এডমিন যাচাই করে দ্রুত ব্যালেন্স যুক্ত করে দেবেন।")
 
 # ----------------- Shop / Buy System -----------------
 async def send_shop_menu(msg_obj, context, is_edit=True):
@@ -205,7 +290,7 @@ async def shop_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['qty'] -= 1
         await send_shop_menu(query, context, is_edit=True)
     elif data == "qty_custom":
-        context.user_data['waiting_qty'] = True
+        context.user_data['state'] = 'WAITING_QTY'
         await query.message.reply_text("✏️ আপনি কতটি কিনতে চান? সংখ্যাটি লিখে দিন:")
     elif data == "confirm_buy":
         qty = context.user_data.get('qty', 1)
@@ -236,113 +321,10 @@ async def shop_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(out_txt, parse_mode="Markdown")
             
     elif data == "cancel_buy":
+        context.user_data.clear()
         await query.edit_message_text("❌ অর্ডার বাতিল করা হয়েছে।")
 
-# ----------------- Deposit System -----------------
-async def dep_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    kbd = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🟢 bKash", callback_data="d_bkash"), InlineKeyboardButton("🔴 Nagad", callback_data="d_nagad")],
-        [InlineKeyboardButton("🟣 Rocket", callback_data="d_rocket")],
-        [InlineKeyboardButton("❌ বাতিল করুন", callback_data="cancel_dep")]
-    ])
-    msg = (
-        "🏦 **ডিপোজিট সিস্টেম**\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"💡 সর্বনিম্ন ডিপোজিট: **{MIN_DEPOSIT:.0f} টাকা**\n\n"
-        "অনুগ্রহ করে আপনার পছন্দের **Payment Method** সিলেক্ট করুন:"
-    )
-    await update.message.reply_text(msg, reply_markup=kbd, parse_mode="Markdown")
-    return METHOD
-
-async def dep_method(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    
-    if q.data == "cancel_dep":
-        await q.edit_message_text("❌ ডিপোজিট প্রক্রিয়া বাতিল করা হয়েছে।")
-        return ConversationHandler.END
-        
-    m = q.data.split("_")[1]
-    context.user_data['dep_m'] = m
-    
-    method_name = "bKash" if m == "bkash" else ("Nagad" if m == "nagad" else "Rocket")
-    
-    await q.edit_message_text(
-        f"✅ আপনি **{method_name}** বেছে নিয়েছেন।\n\n"
-        f"💰 আপনি কত টাকা ডিপোজিট করতে চান? (সর্বনিম্ন {MIN_DEPOSIT:.0f} টাকা লিখে পাঠান):",
-        parse_mode="Markdown"
-    )
-    return AMOUNT
-
-async def dep_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip()
-
-    try:
-        amt = float(text)
-        if amt < MIN_DEPOSIT:
-            await update.message.reply_text(f"❌ সর্বনিম্ন ডিপোজিট **{MIN_DEPOSIT:.0f} টাকা**। অনুগ্রহ করে সঠিক পরিমাণ লিখুন:")
-            return AMOUNT
-            
-        context.user_data['dep_a'] = amt
-        m = context.user_data.get('dep_m')
-        num = BKASH_NUMBER if m == "bkash" else (NAGAD_NUMBER if m == "nagad" else ROCKET_NUMBER)
-        method_name = "bKash" if m == "bkash" else ("Nagad" if m == "nagad" else "Rocket")
-        
-        instructions = (
-            f"📥 **{method_name} Personal Number:** `{num}`\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"💵 মোট জমার পরিমাণ: **{amt:.2f} টাকা**\n\n"
-            "📌 **নির্দেশনা:**\n"
-            f"১. উপরের নম্বরে **Send Money** করুন।\n"
-            "২. টাকা পাঠানোর পর পাওয়া **Transaction ID (TrxID)** অথবা পেমেন্টের **স্ক্রিনশট** এখানে মেসেজ দিন।"
-        )
-        await update.message.reply_text(instructions, parse_mode="Markdown")
-        return PROOF
-    except ValueError:
-        await update.message.reply_text("❌ অনুগ্রহ করে শুধু সংখ্যার মাধ্যমে টাকার পরিমাণ লিখুন (যেমন: 50):")
-        return AMOUNT
-
-async def dep_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    u = update.effective_user
-    a = context.user_data.get('dep_a')
-    m = context.user_data.get('dep_m')
-
-    if not update.message.photo:
-        trx_text = update.message.text.strip()
-        if len(trx_text) < 6 or " " in trx_text or len(trx_text) > 20:
-            await update.message.reply_text(
-                "❌ **ভুল Transaction ID!**\n\n"
-                "অনুগ্রহ করে পেমেন্ট শেষ করার পর প্রাপ্ত সঠিক TrxID (যেমন: `3A4B5C6D7E`) অথবা পেমেন্টের স্ক্রিনশট পাঠান।"
-            )
-            return PROOF
-
-    kbd = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ Approve", callback_data=f"app_{u.id}_{a}"), InlineKeyboardButton("❌ Reject", callback_data=f"rej_{u.id}_{a}")]
-    ])
-    txt = (
-        f"📥 **নতুন ডিপোজিট রিকোয়েস্ট**\n"
-        f"👤 ইউজার: {u.first_name} (`{u.id}`)\n"
-        f"💳 মাধ্যম: {m.upper()}\n"
-        f"💰 পরিমাণ: {a:.2f} টাকা"
-    )
-    
-    if update.message.photo:
-        await context.bot.send_photo(ADMIN_ID, photo=update.message.photo[-1].file_id, caption=txt, reply_markup=kbd, parse_mode="Markdown")
-    else:
-        await context.bot.send_message(ADMIN_ID, text=f"{txt}\n🔑 TrxID: `{update.message.text.strip()}`", reply_markup=kbd, parse_mode="Markdown")
-    
-    await update.message.reply_text("✅ আপনার ডিপোজিট তথ্য জমা হয়েছে! এডমিন যাচাই করে দ্রুত ব্যালেন্স যুক্ত করে দেবেন।")
-    return ConversationHandler.END
-
-async def dep_cancel_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await handle_message(update, context)
-    return ConversationHandler.END
-
-async def dep_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ ডিপোজিট প্রক্রিয়া বাতিল করা হয়েছে।")
-    return ConversationHandler.END
-
-# ----------------- Admin Action Callback -----------------
+# ----------------- Admin Action Callbacks -----------------
 async def admin_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -374,9 +356,31 @@ async def admin_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.edit_message_text(text=msg_txt, parse_mode="Markdown")
             
         try:
-            await context.bot.send_message(target_id, f"❌ দুঃখিত, আপনার **{amt:.2f} টাকার** ডিপোজিট রিকোয়েস্টটি প্রত্যাখান করা হয়েছে। সঠিক তথ্য দিয়ে আবার চেষ্টা করুন।")
+            await context.bot.send_message(target_id, f"❌ দুঃখিত, আপনার **{amt:.2f} টাকার** ডিপোজিট রিকোয়েস্টটি প্রত্যাখান করা হয়েছে।")
         except Exception:
             pass
+
+# ----------------- Deposit Callback Handler -----------------
+async def dep_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    if q.data == "cancel_dep":
+        context.user_data.clear()
+        await q.edit_message_text("❌ ডিপোজিট প্রক্রিয়া বাতিল করা হয়েছে।")
+        return
+        
+    m = q.data.split("_")[1]
+    context.user_data['dep_m'] = m
+    context.user_data['state'] = 'DEP_AMOUNT'
+    
+    method_name = "bKash" if m == "bkash" else ("Nagad" if m == "nagad" else "Rocket")
+    
+    await q.edit_message_text(
+        f"✅ আপনি **{method_name}** বেছে নিয়েছেন।\n\n"
+        f"💰 আপনি কত টাকা ডিপোজিট করতে চান? (সর্বনিম্ন {MIN_DEPOSIT:.0f} টাকা লিখে পাঠান):",
+        parse_mode="Markdown"
+    )
 
 # ----------------- Admin Commands -----------------
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -507,31 +511,7 @@ if __name__ == "__main__":
     app_builder = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init)
     app = app_builder.build()
 
-    dep = ConversationHandler(
-        entry_points=[
-            MessageHandler(filters.Regex(r'.*(ডিপোজিট|deposit).*?'), dep_start)
-        ],
-        states={
-            METHOD: [
-                CallbackQueryHandler(dep_method, pattern="^(d_|cancel_dep)"),
-                MessageHandler(filters.Regex(MENU_REGEX), dep_cancel_to_menu)
-            ],
-            AMOUNT: [
-                MessageHandler(filters.Regex(MENU_REGEX), dep_cancel_to_menu),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, dep_amount)
-            ],
-            PROOF: [
-                MessageHandler(filters.Regex(MENU_REGEX), dep_cancel_to_menu),
-                MessageHandler((filters.PHOTO | filters.TEXT) & ~filters.COMMAND, dep_proof)
-            ]
-        },
-        fallbacks=[
-            CommandHandler('cancel', dep_cancel),
-            MessageHandler(filters.Regex(MENU_REGEX), dep_cancel_to_menu)
-        ]
-    )
-
-    # Command Handlers
+    # Commands
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("importsheet", import_sheet))
     app.add_handler(CommandHandler("addstock", add_stock))
@@ -540,13 +520,16 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("adminstats", admin_stats))
     app.add_handler(CommandHandler("broadcast", broadcast_command))
 
-    # Conversation and Callbacks
-    app.add_handler(dep)
+    # Callback Query Handlers
+    app.add_handler(CallbackQueryHandler(dep_cb, pattern="^(d_|cancel_dep)"))
     app.add_handler(CallbackQueryHandler(shop_cb, pattern="^(qty_|confirm_|cancel_)"))
     app.add_handler(CallbackQueryHandler(admin_cb, pattern="^(app_|rej_)"))
 
-    # General Fallback Handler for text & buttons
+    # Photo Message Handler (For deposit proof screenshot)
+    app.add_handler(MessageHandler(filters.PHOTO, process_dep_proof))
+
+    # Text Message Handler (Central Event Processing)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    print("Bot is running with SQLite database...")
+    print("Bot is running with bulletproof event handlers...")
     app.run_polling()
