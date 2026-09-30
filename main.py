@@ -93,13 +93,7 @@ def get_kbd(is_admin):
         kbd.append([KeyboardButton("⚙️ এডমিন প্যানেল")])
     return ReplyKeyboardMarkup(kbd, resize_keyboard=True)
 
-MENU_BUTTONS = [
-    "👤 প্রোফাইল", "👤 Profile",
-    "💲 প্রডাক্ট কিনুন", "💲 Buy Product", "🛒 Buy Product",
-    "💬 সাপোর্ট", "💬 Support",
-    "⚙️ এডমিন প্যানেল", "⚙ Admin Panel", "⚙️ Admin Panel",
-    "🏦 ডিপোজিট", "🏦 Deposit", "💳 Deposit"
-]
+MENU_REGEX = '^(👤 প্রোফাইল|👤 Profile|💲 প্রডাক্ট কিনুন|💲 Buy Product|🛒 Buy Product|💬 সাপোর্ট|💬 Support|⚙️ এডমিন প্যানেল|⚙ Admin Panel|⚙️ Admin Panel|🏦 ডিপোজিট|🏦 Deposit|💳 Deposit)$'
 
 # ----------------- Core Commands -----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -119,7 +113,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = user.id
     
     if context.user_data.get('waiting_qty'):
-        if text in MENU_BUTTONS:
+        if re.match(MENU_REGEX, text):
             context.user_data['waiting_qty'] = False
         elif text.isdigit() and int(text) > 0:
             context.user_data['qty'] = int(text)
@@ -151,7 +145,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text in ["💬 সাপোর্ট", "💬 Support"]:
         await update.message.reply_text(f"💬 **আমাদের সাপোর্ট টিম:** {support_user}\n\nযেকোনো সহায়তার জন্য মেসেজ দিন।", parse_mode="Markdown")
         
-    elif text in ["⚙️ এডমিন প্যানেল", "⚙ Admin Panel", "⚙️️ Admin Panel"] and uid == ADMIN_ID:
+    elif text in ["⚙️ এডমিন প্যানেল", "⚙ Admin Panel", "⚙️ Admin Panel"] and uid == ADMIN_ID:
         await admin_panel(update, context)
 
 # ----------------- Shop / Buy System -----------------
@@ -233,7 +227,7 @@ async def shop_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "cancel_buy":
         await query.edit_message_text("❌ অর্ডার বাতিল করা হয়েছে।")
 
-# ----------------- Deposit System (Auto-Cancel on Menu Click) -----------------
+# ----------------- Deposit System -----------------
 async def dep_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kbd = InlineKeyboardMarkup([
         [InlineKeyboardButton("🟢 bKash", callback_data="d_bkash"), InlineKeyboardButton("🔴 Nagad", callback_data="d_nagad")],
@@ -271,11 +265,6 @@ async def dep_method(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def dep_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
-    
-    # User menu-er button-e click korle conversation cancel hobe
-    if text in MENU_BUTTONS:
-        await handle_message(update, context)
-        return ConversationHandler.END
 
     try:
         amt = float(text)
@@ -306,13 +295,6 @@ async def dep_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     a = context.user_data.get('dep_a')
     m = context.user_data.get('dep_m')
-    
-    # User menu-er button-e click korle deposit session cancel hobe
-    if update.message and update.message.text:
-        text = update.message.text.strip()
-        if text in MENU_BUTTONS:
-            await handle_message(update, context)
-            return ConversationHandler.END
 
     if not update.message.photo:
         trx_text = update.message.text.strip()
@@ -339,6 +321,10 @@ async def dep_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(ADMIN_ID, text=f"{txt}\n🔑 TrxID: `{update.message.text.strip()}`", reply_markup=kbd, parse_mode="Markdown")
     
     await update.message.reply_text("✅ আপনার ডিপোজিট তথ্য জমা হয়েছে! এডমিন যাচাই করে দ্রুত ব্যালেন্স যুক্ত করে দেবেন।")
+    return ConversationHandler.END
+
+async def dep_cancel_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await handle_message(update, context)
     return ConversationHandler.END
 
 async def dep_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -454,7 +440,7 @@ async def set_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
             unit_price = float(context.args[0])
             await update.message.reply_text(f"✅ প্রতি মেইলের নতুন মূল্য: `{unit_price:.2f}` টাকা", parse_mode="Markdown")
         except ValueError:
-            await update.message.reply_text("⚠️️ ব্যবহার করার নিয়ম: `/setprice 1.5`", parse_mode="Markdown")
+            await update.message.reply_text("⚠ ব্যবহার করার নিয়ম: `/setprice 1.5`", parse_mode="Markdown")
 
 async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == ADMIN_ID:
@@ -516,12 +502,18 @@ if __name__ == "__main__":
         ],
         states={
             METHOD: [CallbackQueryHandler(dep_method, pattern="^(d_|cancel_dep)")],
-            AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, dep_amount)],
-            PROOF: [MessageHandler((filters.PHOTO | filters.TEXT) & ~filters.COMMAND, dep_proof)]
+            AMOUNT: [
+                MessageHandler(filters.Regex(MENU_REGEX), dep_cancel_to_menu),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, dep_amount)
+            ],
+            PROOF: [
+                MessageHandler(filters.Regex(MENU_REGEX), dep_cancel_to_menu),
+                MessageHandler((filters.PHOTO | filters.TEXT) & ~filters.COMMAND, dep_proof)
+            ]
         },
         fallbacks=[
             CommandHandler('cancel', dep_cancel),
-            MessageHandler(filters.Regex('^(💲 প্রডাক্ট কিনুন|👤 প্রোফাইল|💬 সাপোর্ট|⚙️ এডমিন প্যানেল|💲 Buy Product|👤 Profile|💬 Support|⚙️ Admin Panel)$'), dep_cancel)
+            MessageHandler(filters.Regex(MENU_REGEX), dep_cancel_to_menu)
         ]
     )
 
