@@ -86,14 +86,14 @@ def get_all_users():
 def get_kbd(is_admin):
     kbd = [
         [KeyboardButton("💲 প্রডাক্ট কিনুন")],
-        [KeyboardButton("🗣 প্রোফাইল"), KeyboardButton("🏦 ডিপোজিট")],
+        [KeyboardButton("👤 প্রোফাইল"), KeyboardButton("🏦 ডিপোজিট")],
         [KeyboardButton("💬 সাপোর্ট")]
     ]
     if is_admin:
         kbd.append([KeyboardButton("⚙️ এডমিন প্যানেল")])
     return ReplyKeyboardMarkup(kbd, resize_keyboard=True)
 
-MENU_REGEX = r'.*(প্রোফাইল|Profile|প্রডাক্ট কিনুন|Buy Product|সাপোর্ট|Support|এডমিন প্যানেল|Admin Panel|ডিপোজিট|Deposit).*'
+MENU_REGEX = r'(প্রোফাইল|Profile|প্রডাক্ট কিনুন|Buy Product|সাপোর্ট|Support|এডমিন প্যানেল|Admin Panel|ডিপোজিট|Deposit)'
 
 # ----------------- Core Commands -----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -107,13 +107,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(msg, reply_markup=get_kbd(uid == ADMIN_ID), parse_mode="Markdown")
 
+async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    uid = user.id
+    bal = get_bal(uid)
+    profile_msg = (
+        "👤 **আপনার প্রোফাইল বিবরণী**\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"🆔 **ইউজার আইডি:** `{uid}`\n"
+        f"📛 **নাম:** {user.first_name}\n"
+        f"💰 **বর্তমান ব্যালেন্স:** `{bal:.2f}` টাকা"
+    )
+    await update.message.reply_text(profile_msg, parse_mode="Markdown")
+
+async def show_support(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(f"💬 **আমাদের সাপোর্ট টিম:** {support_user}\n\nযেকোনো সহায়তার জন্য মেসেজ দিন।", parse_mode="Markdown")
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user = update.effective_user
     uid = user.id
     
     if context.user_data.get('waiting_qty'):
-        if re.match(MENU_REGEX, text):
+        if re.search(MENU_REGEX, text, re.IGNORECASE):
             context.user_data['waiting_qty'] = False
         elif text.isdigit() and int(text) > 0:
             context.user_data['qty'] = int(text)
@@ -124,30 +140,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("⚠️ অনুগ্রহ করে সঠিক একটি সংখ্যা লিখুন:")
             return
 
-    bal = get_bal(uid)
-    
-    # প্রোফাইল চেক (ইমোজি যেকোনোটি হোক না কেন শুধু 'প্রোফাইল' বা 'Profile' টেক্সট থাকলে কাজ করবে)
-    if "প্রোফাইল" in text or "Profile" in text:
-        profile_msg = (
-            "👤 **আপনার প্রোফাইল বিবরণী**\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"🆔 **ইউজার আইডি:** `{uid}`\n"
-            f"📛 **নাম:** {user.first_name}\n"
-            f"💰 **বর্তমান ব্যালেন্স:** `{bal:.2f}` টাকা"
-        )
-        await update.message.reply_text(profile_msg, parse_mode="Markdown")
-        
-    elif "প্রডাক্ট কিনুন" in text or "Buy Product" in text:
+    if "প্রোফাইল" in text or "profile" in text.lower():
+        await show_profile(update, context)
+    elif "প্রডাক্ট কিনুন" in text or "buy product" in text.lower():
         if not mail_stock:
             await update.message.reply_text("❌ দুঃখিত! বর্তমানে স্টকে কোনো মেইল নেই।")
             return
         context.user_data['qty'] = 1
         await send_shop_menu(update.message, context, is_edit=False)
-        
-    elif "সাপোর্ট" in text or "Support" in text:
-        await update.message.reply_text(f"💬 **আমাদের সাপোর্ট টিম:** {support_user}\n\nযেকোনো সহায়তার জন্য মেসেজ দিন।", parse_mode="Markdown")
-        
-    elif ("এডমিন প্যানেল" in text or "Admin Panel" in text) and uid == ADMIN_ID:
+    elif "সাপোর্ট" in text or "support" in text.lower():
+        await show_support(update, context)
+    elif ("এডমিন প্যানেল" in text or "admin panel" in text.lower()) and uid == ADMIN_ID:
         await admin_panel(update, context)
 
 # ----------------- Shop / Buy System -----------------
@@ -522,6 +525,7 @@ if __name__ == "__main__":
         ]
     )
 
+    # Handlers Priority Order
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("importsheet", import_sheet))
     app.add_handler(CommandHandler("addstock", add_stock))
@@ -530,6 +534,10 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("adminstats", admin_stats))
     app.add_handler(CommandHandler("broadcast", broadcast_command))
     
+    # Explicit message handlers for Profile and Support
+    app.add_handler(MessageHandler(filters.Regex(r'.*(প্রোফাইল|Profile).*'), show_profile))
+    app.add_handler(MessageHandler(filters.Regex(r'.*(সাপোর্ট|Support).*'), show_support))
+
     app.add_handler(dep)
     app.add_handler(CallbackQueryHandler(shop_cb, pattern="^(qty_|confirm_|cancel_)"))
     app.add_handler(CallbackQueryHandler(admin_cb, pattern="^(app_|rej_)"))
