@@ -24,21 +24,21 @@ from telegram.ext import (
 )
 
 # ----------------- Flask Server for Keeping Alive -----------------
-app = Flask(__name__)
+flask_app = Flask(__name__)
 
-@app.route("/")
+@flask_app.route("/")
 def home():
     return "Bot is running perfectly!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
+    flask_app.run(host="0.0.0.0", port=port)
 
 threading.Thread(target=run_flask, daemon=True).start()
 
 # ----------------- Configuration Settings -----------------
-BOT_TOKEN = "8803998786:AAGm8heUXaFS7T338B-D7y5UW0WbdyFFkoI"  # Apnar Bot Token
-ADMIN_ID = 7792142088                                      # Admin ID
+BOT_TOKEN = "8803998786:AAGm8heUXaFS7T338B-D7y5UW0WbdyFFkoI"  # এখানে আপনার Bot Token দিন
+ADMIN_ID = 7792142088               # Admin ID
 
 # Payment Numbers
 BKASH_NUMBER = "01766872406"
@@ -108,7 +108,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg, reply_markup=get_kbd(uid == ADMIN_ID), parse_mode="Markdown")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
+    text = update.message.text.strip()
     user = update.effective_user
     uid = user.id
     
@@ -142,7 +142,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['qty'] = 1
         await send_shop_menu(update.message, context, is_edit=False)
         
-    elif text in ["💬 সাপোর্ট", "💬 Support"]:
+    elif "সাপোর্ট" in text or "Support" in text:
         await update.message.reply_text(f"💬 **আমাদের সাপোর্ট টিম:** {support_user}\n\nযেকোনো সহায়তার জন্য মেসেজ দিন।", parse_mode="Markdown")
         
     elif text in ["⚙️ এডমিন প্যানেল", "⚙ Admin Panel", "⚙️ Admin Panel"] and uid == ADMIN_ID:
@@ -493,8 +493,7 @@ async def post_init(application):
 
 # ----------------- App Initialization -----------------
 if __name__ == "__main__":
-    app_builder = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init)
-    app = app_builder.build()
+    bot_app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
 
     dep = ConversationHandler(
         entry_points=[
@@ -520,18 +519,18 @@ if __name__ == "__main__":
         ]
     )
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("importsheet", import_sheet))
-    app.add_handler(CommandHandler("addstock", add_stock))
-    app.add_handler(CommandHandler("addbalance", add_balance))
-    app.add_handler(CommandHandler("setprice", set_price))
-    app.add_handler(CommandHandler("adminstats", admin_stats))
-    app.add_handler(CommandHandler("broadcast", broadcast_command))
+    bot_app.add_handler(CommandHandler("start", start))
+    bot_app.add_handler(CommandHandler("importsheet", import_sheet))
+    bot_app.add_handler(CommandHandler("addstock", add_stock))
+    bot_app.add_handler(CommandHandler("addbalance", add_balance))
+    bot_app.add_handler(CommandHandler("setprice", set_price))
+    bot_app.add_handler(CommandHandler("adminstats", admin_stats))
+    bot_app.add_handler(CommandHandler("broadcast", broadcast_command))
     
-    app.add_handler(dep)
-    app.add_handler(CallbackQueryHandler(shop_cb, pattern="^(qty_|confirm_|cancel_)"))
-    app.add_handler(CallbackQueryHandler(admin_cb, pattern="^(app_|rej_)"))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    bot_app.add_handler(dep)
+    bot_app.add_handler(CallbackQueryHandler(shop_cb, pattern="^(qty_|confirm_|cancel_)"))
+    bot_app.add_handler(CallbackQueryHandler(admin_cb, pattern="^(app_|rej_)"))
+    bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print("Bot is running with SQLite database...")
-    app.run_polling()
+    bot_app.run_polling()
