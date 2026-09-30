@@ -37,7 +37,7 @@ def run_flask():
 threading.Thread(target=run_flask, daemon=True).start()
 
 # ----------------- Configuration Settings -----------------
-BOT_TOKEN = "8803998786:AAGVJ3KXGiqlSbFEOTfGMUA5dTZOdmzetEw"  # Apnar Bot Token
+BOT_TOKEN = "8803998786:AAGm8heUXaFS7T338B-D7y5UW0WbdyFFkoI"  # Apnar Bot Token
 ADMIN_ID = 7792142088                                      # Admin ID
 
 # Payment Numbers
