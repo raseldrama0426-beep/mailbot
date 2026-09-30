@@ -23,7 +23,7 @@ from telegram.ext import (
     filters
 )
 
-# ----------------- Flask Server -----------------
+# ----------------- Flask Server for Keeping Alive -----------------
 app = Flask(__name__)
 
 @app.route("/")
@@ -36,7 +36,7 @@ def run_flask():
 
 threading.Thread(target=run_flask, daemon=True).start()
 
-# ----------------- Configuration -----------------
+# ----------------- Configuration Settings -----------------
 BOT_TOKEN = "8803998786:AAETJSRZPzcu6aUI1q914TvA5jcNw3Mrw0A"  # Apnar Bot Token
 ADMIN_ID = 7792142088                                      # Admin ID
 
@@ -45,17 +45,15 @@ BKASH_NUMBER = "01766872406"
 NAGAD_NUMBER = "01821826206"
 ROCKET_NUMBER = "01766872406"
 
-BKASH_LOGO = "https://i.ibb.co/L5QxZ2k/bkash-logo.jpg"
-NAGAD_LOGO = "https://i.ibb.co/Bsn4R44/nagad-logo.jpg"
-ROCKET_LOGO = "https://i.ibb.co/hK8bQzL/rocket-logo.jpg"
-
 MIN_DEPOSIT = 20.0
 DB_FILE = os.path.join(os.getcwd(), "bot_database.db")
 
+# Bot Main Data
 mail_stock = ["kelli.731@piepla.com:rasel24", "michal@piepla.com:rasel24"]
-support_user = "@earnikzone"
-unit_price = 0.80
+support_user = "@earnikzone"  # Support ID
+unit_price = 0.80  # Per Mail Price
 
+# Conversation States
 METHOD, AMOUNT, PROOF = range(3)
 
 logging.basicConfig(level=logging.INFO)
@@ -106,7 +104,6 @@ MENU_BUTTONS = [
 # ----------------- Core Commands -----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-
     if get_bal(uid) == 0.0:
         set_bal(uid, 0.0)
     
@@ -117,9 +114,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg, reply_markup=get_kbd(uid == ADMIN_ID), parse_mode="Markdown")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
     user = update.effective_user
     uid = user.id
-    text = update.message.text
     
     if context.user_data.get('waiting_qty'):
         if text in MENU_BUTTONS:
@@ -154,10 +151,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text in ["💬 সাপোর্ট", "💬 Support"]:
         await update.message.reply_text(f"💬 **আমাদের সাপোর্ট টিম:** {support_user}\n\nযেকোনো সহায়তার জন্য মেসেজ দিন।", parse_mode="Markdown")
         
-    elif text in ["⚙️ এডমিন প্যানেল", "⚙ Admin Panel", "⚙️ Admin Panel"] and uid == ADMIN_ID:
+    elif text in ["⚙️ এডমিন প্যানেল", "⚙ Admin Panel", "⚙️️ Admin Panel"] and uid == ADMIN_ID:
         await admin_panel(update, context)
 
-# ----------------- Shop System -----------------
+# ----------------- Shop / Buy System -----------------
 async def send_shop_menu(msg_obj, context, is_edit=True):
     qty = context.user_data.get('qty', 1)
     stock = len(mail_stock)
@@ -236,11 +233,11 @@ async def shop_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "cancel_buy":
         await query.edit_message_text("❌ অর্ডার বাতিল করা হয়েছে।")
 
-# ----------------- Deposit System -----------------
+# ----------------- Deposit System (Auto-Cancel on Menu Click) -----------------
 async def dep_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kbd = InlineKeyboardMarkup([
-        [InlineKeyboardButton("bKash", callback_data="d_bkash"), InlineKeyboardButton("Nagad", callback_data="d_nagad")],
-        [InlineKeyboardButton("Rocket", callback_data="d_rocket")],
+        [InlineKeyboardButton("🟢 bKash", callback_data="d_bkash"), InlineKeyboardButton("🔴 Nagad", callback_data="d_nagad")],
+        [InlineKeyboardButton("🟣 Rocket", callback_data="d_rocket")],
         [InlineKeyboardButton("❌ বাতিল করুন", callback_data="cancel_dep")]
     ])
     msg = (
@@ -264,13 +261,10 @@ async def dep_method(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['dep_m'] = m
     
     method_name = "bKash" if m == "bkash" else ("Nagad" if m == "nagad" else "Rocket")
-    logo_url = BKASH_LOGO if m == "bkash" else (NAGAD_LOGO if m == "nagad" else ROCKET_LOGO)
     
-    await q.message.delete()
-    await context.bot.send_photo(
-        chat_id=q.message.chat_id,
-        photo=logo_url,
-        caption=f"✅ আপনি **{method_name}** বেছে নিয়েছেন।\n\n💰 আপনি কত টাকা ডিপোজিট করতে চান? (সর্বনিম্ন {MIN_DEPOSIT:.0f} টাকা লিখে পাঠান):",
+    await q.edit_message_text(
+        f"✅ আপনি **{method_name}** বেছে নিয়েছেন।\n\n"
+        f"💰 আপনি কত টাকা ডিপোজিট করতে চান? (সর্বনিম্ন {MIN_DEPOSIT:.0f} টাকা লিখে পাঠান):",
         parse_mode="Markdown"
     )
     return AMOUNT
@@ -278,6 +272,7 @@ async def dep_method(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def dep_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     
+    # User menu-er button-e click korle conversation cancel hobe
     if text in MENU_BUTTONS:
         await handle_message(update, context)
         return ConversationHandler.END
@@ -292,7 +287,6 @@ async def dep_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
         m = context.user_data.get('dep_m')
         num = BKASH_NUMBER if m == "bkash" else (NAGAD_NUMBER if m == "nagad" else ROCKET_NUMBER)
         method_name = "bKash" if m == "bkash" else ("Nagad" if m == "nagad" else "Rocket")
-        logo_url = BKASH_LOGO if m == "bkash" else (NAGAD_LOGO if m == "nagad" else ROCKET_LOGO)
         
         instructions = (
             f"📥 **{method_name} Personal Number:** `{num}`\n"
@@ -302,12 +296,7 @@ async def dep_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"১. উপরের নম্বরে **Send Money** করুন।\n"
             "২. টাকা পাঠানোর পর পাওয়া **Transaction ID (TrxID)** অথবা পেমেন্টের **স্ক্রিনশট** এখানে মেসেজ দিন।"
         )
-        await context.bot.send_photo(
-            chat_id=update.message.chat_id,
-            photo=logo_url,
-            caption=instructions,
-            parse_mode="Markdown"
-        )
+        await update.message.reply_text(instructions, parse_mode="Markdown")
         return PROOF
     except ValueError:
         await update.message.reply_text("❌ অনুগ্রহ করে শুধু সংখ্যার মাধ্যমে টাকার পরিমাণ লিখুন (যেমন: 50):")
@@ -318,6 +307,7 @@ async def dep_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
     a = context.user_data.get('dep_a')
     m = context.user_data.get('dep_m')
     
+    # User menu-er button-e click korle deposit session cancel hobe
     if update.message and update.message.text:
         text = update.message.text.strip()
         if text in MENU_BUTTONS:
@@ -439,7 +429,7 @@ async def import_sheet(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await update.message.reply_text("❌ Sheet লোড হয়নি! লিঙ্ক শেয়ার অপশন **'Anyone with the link'** করা আছে কিনা নিশ্চিত করুন।")
     except Exception as e:
-        await update.message.reply_text(f"⚠ ত্রুটি: {str(e)}")
+        await update.message.reply_text(f"⚠️ ত্রুটি: {str(e)}")
 
 async def add_stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == ADMIN_ID and context.args:
@@ -455,7 +445,7 @@ async def add_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
             set_bal(uid, new_bal)
             await update.message.reply_text(f"✅ ইউজার `{uid}` এর নতুন ব্যালেন্স: `{new_bal:.2f}` টাকা", parse_mode="Markdown")
         except ValueError:
-            await update.message.reply_text("⚠ ব্যবহার করার নিয়ম: `/addbalance USER_ID AMOUNT`", parse_mode="Markdown")
+            await update.message.reply_text("⚠️ ব্যবহার করার নিয়ম: `/addbalance USER_ID AMOUNT`", parse_mode="Markdown")
 
 async def set_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global unit_price
@@ -464,7 +454,7 @@ async def set_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
             unit_price = float(context.args[0])
             await update.message.reply_text(f"✅ প্রতি মেইলের নতুন মূল্য: `{unit_price:.2f}` টাকা", parse_mode="Markdown")
         except ValueError:
-            await update.message.reply_text("⚠️ ব্যবহার করার নিয়ম: `/setprice 1.5`", parse_mode="Markdown")
+            await update.message.reply_text("⚠️️ ব্যবহার করার নিয়ম: `/setprice 1.5`", parse_mode="Markdown")
 
 async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == ADMIN_ID:
@@ -548,5 +538,5 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(admin_cb, pattern="^(app_|rej_)"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    print("Bot is running...")
+    print("Bot is running with SQLite database...")
     app.run_polling()
