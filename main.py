@@ -37,7 +37,7 @@ def run_flask():
 threading.Thread(target=run_flask, daemon=True).start()
 
 # ----------------- Configuration Settings -----------------
-BOT_TOKEN = "8803998786:AAETJSRZPzcu6aUI1q914TvA5jcNw3Mrw0A"  # Apnar Bot Token
+BOT_TOKEN = "8803998786:AAGVJ3KXGiqlSbFEOTfGMUA5dTZOdmzetEw"  # Apnar Bot Token
 ADMIN_ID = 7792142088                                      # Admin ID
 
 # Payment Numbers
@@ -501,7 +501,10 @@ if __name__ == "__main__":
             MessageHandler(filters.Regex('^(🏦 ডিপোজিট|🏦 Deposit|💳 Deposit)$'), dep_start)
         ],
         states={
-            METHOD: [CallbackQueryHandler(dep_method, pattern="^(d_|cancel_dep)")],
+            METHOD: [
+                CallbackQueryHandler(dep_method, pattern="^(d_|cancel_dep)"),
+                MessageHandler(filters.Regex(MENU_REGEX), dep_cancel_to_menu)
+            ],
             AMOUNT: [
                 MessageHandler(filters.Regex(MENU_REGEX), dep_cancel_to_menu),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, dep_amount)
