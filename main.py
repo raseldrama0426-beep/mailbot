@@ -86,14 +86,14 @@ def get_all_users():
 def get_kbd(is_admin):
     kbd = [
         [KeyboardButton("💲 প্রডাক্ট কিনুন")],
-        [KeyboardButton("👤 প্রোফাইল"), KeyboardButton("🏦 ডিপোজিট")],
+        [KeyboardButton("🗣 প্রোফাইল"), KeyboardButton("🏦 ডিপোজিট")],
         [KeyboardButton("💬 সাপোর্ট")]
     ]
     if is_admin:
         kbd.append([KeyboardButton("⚙️ এডমিন প্যানেল")])
     return ReplyKeyboardMarkup(kbd, resize_keyboard=True)
 
-MENU_REGEX = '^(👤 প্রোফাইল|👤 Profile|💲 প্রডাক্ট কিনুন|💲 Buy Product|🛒 Buy Product|💬 সাপোর্ট|💬 Support|⚙️ এডমিন প্যানেল|⚙ Admin Panel|⚙️ Admin Panel|🏦 ডিপোজিট|🏦 Deposit|💳 Deposit)$'
+MENU_REGEX = r'.*(প্রোফাইল|Profile|প্রডাক্ট কিনুন|Buy Product|সাপোর্ট|Support|এডমিন প্যানেল|Admin Panel|ডিপোজিট|Deposit).*'
 
 # ----------------- Core Commands -----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -125,7 +125,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
     bal = get_bal(uid)
-    if text in ["👤 প্রোফাইল", "👤 Profile"]:
+    
+    # প্রোফাইল চেক (ইমোজি যেকোনোটি হোক না কেন শুধু 'প্রোফাইল' বা 'Profile' টেক্সট থাকলে কাজ করবে)
+    if "প্রোফাইল" in text or "Profile" in text:
         profile_msg = (
             "👤 **আপনার প্রোফাইল বিবরণী**\n"
             "━━━━━━━━━━━━━━━━━━━\n"
@@ -135,17 +137,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await update.message.reply_text(profile_msg, parse_mode="Markdown")
         
-    elif text in ["💲 প্রডাক্ট কিনুন", "💲 Buy Product", "🛒 Buy Product"]:
+    elif "প্রডাক্ট কিনুন" in text or "Buy Product" in text:
         if not mail_stock:
             await update.message.reply_text("❌ দুঃখিত! বর্তমানে স্টকে কোনো মেইল নেই।")
             return
         context.user_data['qty'] = 1
         await send_shop_menu(update.message, context, is_edit=False)
         
-    elif text in ["💬 সাপোর্ট", "💬 Support"]:
+    elif "সাপোর্ট" in text or "Support" in text:
         await update.message.reply_text(f"💬 **আমাদের সাপোর্ট টিম:** {support_user}\n\nযেকোনো সহায়তার জন্য মেসেজ দিন।", parse_mode="Markdown")
         
-    elif text in ["⚙️ এডমিন প্যানেল", "⚙ Admin Panel", "⚙️ Admin Panel"] and uid == ADMIN_ID:
+    elif ("এডমিন প্যানেল" in text or "Admin Panel" in text) and uid == ADMIN_ID:
         await admin_panel(update, context)
 
 # ----------------- Shop / Buy System -----------------
@@ -498,7 +500,7 @@ if __name__ == "__main__":
 
     dep = ConversationHandler(
         entry_points=[
-            MessageHandler(filters.Regex('^(🏦 ডিপোজিট|🏦 Deposit|💳 Deposit)$'), dep_start)
+            MessageHandler(filters.Regex(r'.*(ডিপোজিট|Deposit).*'), dep_start)
         ],
         states={
             METHOD: [
