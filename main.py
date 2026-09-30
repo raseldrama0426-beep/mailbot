@@ -1,33 +1,59 @@
 import os
 import threading
+import logging
+import sqlite3
+import requests
+import re
 from flask import Flask
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+    BotCommand
+)
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    CallbackQueryHandler,
+    ConversationHandler,
+    filters
+)
 
+# ----------------- Flask Server for Keeping Alive -----------------
 app = Flask(__name__)
-
 
 @app.route("/")
 def home():
-  return "Bot is running!"
+    return "Bot is running perfectly!"
 
+def run_flask():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
 
-def run():
-  port = int(os.environ.get("PORT", 8080))
-  app.run(host="0.0.0.0", port=port)
+threading.Thread(target=run_flask, daemon=True).start()
 
+# ----------------- Configuration Settings -----------------
+BOT_TOKEN = "8803998786:AAETJSRZPzcu6aUI1q914TvA5jcNw3Mrw0A"  # আপনার বটের টোকেন
+ADMIN_ID = 7792142088                                      # এডমিন আইডি
 
-threading.Thread(target=run, daemon=True).start()
-import logging, sqlite3, requests, re
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, CallbackQueryHandler, ConversationHandler, filters
+# পেমেন্ট নম্বরসমূহ
+BKASH_NUMBER = "01766872406"
+NAGAD_NUMBER = "01821826206"
+ROCKET_NUMBER = "01766872406"
 
-# ----------------- Configuration -----------------
-BOT_TOKEN = "8803998786:AAETJSRZPzcu6aUI1q914TvA5jcNw3Mrw0A"  # BotFather token
-ADMIN_ID = 7792142088               # Telegram Admin User ID (Number)
+MIN_DEPOSIT = 20.0
+DB_FILE = "bot_database.db"
 
-BKASH_NUMBER, NAGAD_NUMBER, ROCKET_NUMBER = "01766872406", "01821826206", "01766872406"
-MIN_DEPOSIT, DB_FILE = 20.0, "bot_database.db"
-mail_stock, support_user = ["kelli.731@piepla.com:rasel24", "michal@piepla.com:rasel24"], "@earnikzone"
-unit_price = 0.80  # Default Mail Price
+# বটের মূল ডাটা
+mail_stock = ["kelli.731@piepla.com:rasel24", "michal@piepla.com:rasel24"]
+support_user = "@earnikzone"  # এখানে আপনার সাপোর্ট আইডি দিন
+unit_price = 0.80  # প্রতি মেইলের দাম
+
+# Conversation States
 METHOD, AMOUNT, PROOF = range(3)
 
 logging.basicConfig(level=logging.INFO)
@@ -38,7 +64,8 @@ def db_query(query, params=(), fetchone=False, fetchall=False, commit=False):
     c = conn.cursor()
     c.execute(query, params)
     res = c.fetchone() if fetchone else (c.fetchall() if fetchall else None)
-    if commit: conn.commit()
+    if commit: 
+        conn.commit()
     conn.close()
     return res
 
@@ -51,73 +78,129 @@ def get_bal(uid):
 def set_bal(uid, bal):
     db_query("INSERT INTO users (user_id, balance) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET balance = ?", (uid, bal, bal), commit=True)
 
-# ----------------- Keyboards & Interface -----------------
+def get_all_users():
+    rows = db_query("SELECT user_id FROM users", fetchall=True)
+    return [r[0] for r in rows] if rows else []
+
+# ----------------- Keyboards -----------------
 def get_kbd(is_admin):
-    kbd = [[KeyboardButton("💲 Buy Product")], [KeyboardButton("👤 Profile"), KeyboardButton("🏦 Deposit")], [KeyboardButton("💬 Support")]]
-    if is_admin: kbd.append([KeyboardButton("⚙️ Admin Panel")])
+    kbd = [
+        [KeyboardButton("💲 প্রডাক্ট কিনুন")],
+        [KeyboardButton("👤 প্রোফাইল"), KeyboardButton("🏦 ডিপোজিট")],
+        [KeyboardButton("💬 সাপোর্ট")]
+    ]
+    if is_admin:
+        kbd.append([KeyboardButton("⚙️ এডমিন প্যানেল")])
     return ReplyKeyboardMarkup(kbd, resize_keyboard=True)
 
+# ----------------- Core Commands -----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    if get_bal(uid) == 0.0: set_bal(uid, 0.0)
-    await update.message.reply_text("👋 **Swagotom!** Menu select korun:", reply_markup=get_kbd(uid == ADMIN_ID), parse_mode="Markdown")
+    if get_bal(uid) == 0.0:
+        set_bal(uid, 0.0)
+    
+    msg = (
+        "👋 **স্বাগতম আমাদের প্রিমিয়াম স্টোরে!**\n\n"
+        "আপনার প্রয়োজনীয় সেবা পেতে নিচের মেনু থেকে অপশন সিলেক্ট করুন:"
+    )
+    await update.message.reply_text(msg, reply_markup=get_kbd(uid == ADMIN_ID), parse_mode="Markdown")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text, user, uid = update.message.text, update.effective_user, update.effective_user.id
+    text = update.message.text
+    user = update.effective_user
+    uid = user.id
     
+    # Custom Quantity Input Handling
     if context.user_data.get('waiting_qty'):
         if text.isdigit() and int(text) > 0:
-            context.user_data['qty'], context.user_data['waiting_qty'] = int(text), False
+            context.user_data['qty'] = int(text)
+            context.user_data['waiting_qty'] = False
             await send_shop_menu(update.message, context, is_edit=False)
         else:
-            await update.message.reply_text("⚠️ Sothik shongkha likhun:")
+            await update.message.reply_text("⚠️ অনুগ্রহ করে সঠিক একটি সংখ্যা লিখুন:")
         return
 
     bal = get_bal(uid)
-    if text == "👤 Profile":
-        await update.message.reply_text(f"👤 **Profile**\n🆔 ID: `{uid}`\n📛 Name: {user.first_name}\n💰 Balance: `{bal:.2f}` TK", parse_mode="Markdown")
-    elif text in ["💲 Buy Product", "🛒 Buy Product"]:
+    if text in ["👤 প্রোফাইল", "👤 Profile"]:
+        profile_msg = (
+            "👤 **আপনার প্রোফাইল বিবরণী**\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            f"🆔 **ইউজার আইডি:** `{uid}`\n"
+            f"📛 **নাম:** {user.first_name}\n"
+            f"💰 **বর্তমান ব্যালেন্স:** `{bal:.2f}` টাকা"
+        )
+        await update.message.reply_text(profile_msg, parse_mode="Markdown")
+        
+    elif text in ["💲 প্রডাক্ট কিনুন", "💲 Buy Product", "🛒 Buy Product"]:
         if not mail_stock:
-            await update.message.reply_text("❌ Dukkhito! Stock-e mail nei.")
+            await update.message.reply_text("❌ দুঃখিত! বর্তমানে স্টকে কোনো মেইল নেই।")
             return
         context.user_data['qty'] = 1
         await send_shop_menu(update.message, context, is_edit=False)
-    elif text == "💬 Support":
-        await update.message.reply_text(f"💬 Support: {support_user}")
-    elif text in ["⚙️ Admin Panel", "⚙ Admin Panel"] and uid == ADMIN_ID:
+        
+    elif text in ["💬 সাপোর্ট", "💬 Support"]:
+        await update.message.reply_text(f"💬 **আমাদের সাপোর্ট টিম:** {support_user}\n\nযেকোনো সহায়তার জন্য মেসেজ দিন।", parse_mode="Markdown")
+        
+    elif text in ["⚙️ এডমিন প্যানেল", "⚙ Admin Panel", "⚙️ Admin Panel"] and uid == ADMIN_ID:
         await admin_panel(update, context)
 
+# ----------------- Shop / Buy System -----------------
 async def send_shop_menu(msg_obj, context, is_edit=True):
     qty = context.user_data.get('qty', 1)
-    stock, total = len(mail_stock), unit_price * qty
+    stock = len(mail_stock)
+    total = unit_price * qty
+    
     kbd = InlineKeyboardMarkup([
-        [InlineKeyboardButton("➖", callback_data="qty_dec"), InlineKeyboardButton(f"📦 {qty} Pcs", callback_data="qty_val"), InlineKeyboardButton("➕", callback_data="qty_inc")],
-        [InlineKeyboardButton("✏️ Custom Quantity", callback_data="qty_custom")],
-        [InlineKeyboardButton("✅ Confirm Order", callback_data="confirm_buy"), InlineKeyboardButton("❌ Cancel", callback_data="cancel_buy")]
+        [
+            InlineKeyboardButton("➖", callback_data="qty_dec"),
+            InlineKeyboardButton(f"📦 {qty} টি", callback_data="qty_val"),
+            InlineKeyboardButton("➕", callback_data="qty_inc")
+        ],
+        [InlineKeyboardButton("✏️ কাস্টম পরিমাণ লিখুন", callback_data="qty_custom")],
+        [
+            InlineKeyboardButton("✅ অর্ডার নিশ্চিত করুন", callback_data="confirm_buy"),
+            InlineKeyboardButton("❌ বাতিল", callback_data="cancel_buy")
+        ]
     ])
-    txt = f"🌟 **Meta AI ID**\n\n💎 Unit Price: {unit_price:.2f} TK\n📦 Stock: {stock} Pcs\n📊 Selected Qty: {qty}\n💰 Total: {total:.2f} TK"
-    if is_edit: await msg_obj.edit_message_text(txt, reply_markup=kbd, parse_mode="Markdown")
-    else: await msg_obj.reply_text(txt, reply_markup=kbd, parse_mode="Markdown")
+    
+    txt = (
+        "🌟 **Meta AI ID (স্টোর পণ্য)**\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"💎 **একক মূল্য:** {unit_price:.2f} টাকা\n"
+        f"📦 **মোট স্টক আছে:** {stock} টি\n"
+        f"📊 **নির্বাচিত পরিমাণ:** {qty} টি\n"
+        f"💰 **মোট দেয় মূল্য:** {total:.2f} টাকা"
+    )
+    if is_edit:
+        await msg_obj.edit_message_text(txt, reply_markup=kbd, parse_mode="Markdown")
+    else:
+        await msg_obj.reply_text(txt, reply_markup=kbd, parse_mode="Markdown")
 
 async def shop_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    data, uid = query.data, query.from_user.id
+    data = query.data
+    uid = query.from_user.id
     
     if data == "qty_inc":
         context.user_data['qty'] = context.user_data.get('qty', 1) + 1
         await send_shop_menu(query, context, is_edit=True)
     elif data == "qty_dec":
-        if context.user_data.get('qty', 1) > 1: context.user_data['qty'] -= 1
+        if context.user_data.get('qty', 1) > 1:
+            context.user_data['qty'] -= 1
         await send_shop_menu(query, context, is_edit=True)
     elif data == "qty_custom":
         context.user_data['waiting_qty'] = True
-        await query.message.reply_text("✏️ Koy piece nite chan? Shongkha likhun:")
+        await query.message.reply_text("✏️ আপনি কতটি কিনতে চান? সংখ্যাটি লিখে দিন:")
     elif data == "confirm_buy":
         qty = context.user_data.get('qty', 1)
-        total, bal = unit_price * qty, get_bal(uid)
-        if len(mail_stock) < qty: await query.edit_message_text("❌ Porjapto stock nei.")
-        elif bal < total: await query.edit_message_text(f"❌ Balance nei! Required: {total:.2f} TK, Yours: {bal:.2f} TK")
+        total = unit_price * qty
+        bal = get_bal(uid)
+        
+        if len(mail_stock) < qty:
+            await query.edit_message_text("❌ পর্যাপ্ত স্টক নেই! দুঃখিত।")
+        elif bal < total:
+            await query.edit_message_text(f"❌ আপনার পর্যাপ্ত ব্যালেন্স নেই!\n\nপ্রয়োজন: {total:.2f} টাকা\nআপনার আছে: {bal:.2f} টাকা")
         else:
             items = [mail_stock.pop(0) for _ in range(qty)]
             set_bal(uid, bal - total)
@@ -126,99 +209,182 @@ async def shop_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for item in items:
                 if ":" in item:
                     m, p = item.split(":", 1)
-                    formatted_items.append(f"`{m}` | `{p}`")
+                    formatted_items.append(f"📧 `{m}` | 🔑 `{p}`")
                 else:
-                    formatted_items.append(f"`{item}`")
+                    formatted_items.append(f"📦 `{item}`")
             
-            out_txt = "🎉 **Order Success!**\n\n📧 **Mail** | 🔑 **Password**\n" + "\n".join(formatted_items)
+            out_txt = (
+                "🎉 **অর্ডার সফল হয়েছে!**\n"
+                "━━━━━━━━━━━━━━━━━━━\n"
+                "আপনার ক্রয়কৃত একাউন্ট তথ্য নিচে দেওয়া হলো:\n\n" + "\n".join(formatted_items)
+            )
             await query.edit_message_text(out_txt, parse_mode="Markdown")
             
     elif data == "cancel_buy":
-        await query.edit_message_text("❌ Order batil.")
+        await query.edit_message_text("❌ অর্ডার বাতিল করা হয়েছে।")
 
-# ----------------- Deposit System -----------------
+# ----------------- Deposit System (Step-by-Step Flow) -----------------
 async def dep_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    kbd = InlineKeyboardMarkup([[InlineKeyboardButton("🟢 bKash", callback_data="d_bkash"), InlineKeyboardButton("🔴 Nagad", callback_data="d_nagad")], [InlineKeyboardButton("🟣 Rocket", callback_data="d_rocket")]])
-    await update.message.reply_text(f"🏦 **Deposit System** (Min {MIN_DEPOSIT} TK)\nSelect Method:", reply_markup=kbd, parse_mode="Markdown")
+    kbd = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🟢 bKash", callback_data="d_bkash"), InlineKeyboardButton("🔴 Nagad", callback_data="d_nagad")],
+        [InlineKeyboardButton("🟣 Rocket", callback_data="d_rocket")],
+        [InlineKeyboardButton("❌ বাতিল করুন", callback_data="cancel_dep")]
+    ])
+    msg = (
+        "🏦 **ডিপোজিট সিস্টেম**\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"💡 সর্বনিম্ন ডিপোজিট: **{MIN_DEPOSIT:.0f} টাকা**\n\n"
+        "অনুগ্রহ করে আপনার পছন্দের **Payment Method** সিলেক্ট করুন:"
+    )
+    await update.message.reply_text(msg, reply_markup=kbd, parse_mode="Markdown")
     return METHOD
 
 async def dep_method(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
+    
+    if q.data == "cancel_dep":
+        await q.edit_message_text("❌ ডিপোজিট প্রক্রিয়া বাতিল করা হয়েছে।")
+        return ConversationHandler.END
+        
     m = q.data.split("_")[1]
     context.user_data['dep_m'] = m
-    num = BKASH_NUMBER if m == "bkash" else (NAGAD_NUMBER if m == "nagad" else ROCKET_NUMBER)
-    await q.message.reply_text(f"👉 **{m.upper()}**: `{num}`\nAmount likhe message din:", parse_mode="Markdown")
+    
+    method_name = "bKash" if m == "bkash" else ("Nagad" if m == "nagad" else "Rocket")
+    
+    await q.edit_message_text(
+        f"✅ আপনি **{method_name}** বেছে নিয়েছেন।\n\n"
+        f"💰 আপনি কত টাকা ডিপোজিট করতে চান? (সর্বনিম্ন {MIN_DEPOSIT:.0f} টাকা எழுதி পাঠান):",
+        parse_mode="Markdown"
+    )
     return AMOUNT
 
 async def dep_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
     try:
-        amt = float(update.message.text.strip())
+        amt = float(text)
         if amt < MIN_DEPOSIT:
-            await update.message.reply_text(f"❌ Min deposit {MIN_DEPOSIT} TK.")
+            await update.message.reply_text(f"❌ সর্বনিম্ন ডিপোজিট **{MIN_DEPOSIT:.0f} টাকা**। অনুগ্রহ করে সঠিক পরিমাণ লিখুন:")
             return AMOUNT
+            
         context.user_data['dep_a'] = amt
-        await update.message.reply_text("📸 Screenshot ba TrxID pathan:")
+        m = context.user_data.get('dep_m')
+        num = BKASH_NUMBER if m == "bkash" else (NAGAD_NUMBER if m == "nagad" else ROCKET_NUMBER)
+        method_name = "bKash" if m == "bkash" else ("Nagad" if m == "nagad" else "Rocket")
+        
+        instructions = (
+            f"📥 **{method_name} Personal Number:** `{num}`\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            f"💵 মোট জমার পরিমাণ: **{amt:.2f} টাকা**\n\n"
+            "📌 **নির্দেশনা:**\n"
+            f"১. উপরের নম্বরে **Send Money** করুন।\n"
+            "২. টাকা পাঠানোর পর পাওয়া **Transaction ID (TrxID)** অথবা পেমেন্টের **স্ক্রিনশট** এখানে মেসেজ দিন।"
+        )
+        await update.message.reply_text(instructions, parse_mode="Markdown")
         return PROOF
-    except:
-        await update.message.reply_text("❌ Sothik amount likhun:")
+    except ValueError:
+        await update.message.reply_text("❌ অনুগ্রহ করে শুধু সংখ্যার মাধ্যমে টাকার পরিমাণ লিখুন (যেমন: 50):")
         return AMOUNT
 
 async def dep_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    u, a, m = update.effective_user, context.user_data.get('dep_a'), context.user_data.get('dep_m')
-    kbd = InlineKeyboardMarkup([[InlineKeyboardButton("✅ Approve", callback_data=f"app_{u.id}_{a}"), InlineKeyboardButton("❌ Reject", callback_data=f"rej_{u.id}_{a}")]])
-    txt = f"📥 **Deposit Request**\nUser: {u.first_name} (`{u.id}`)\nMethod: {m.upper()}\nAmount: {a} TK"
+    u = update.effective_user
+    a = context.user_data.get('dep_a')
+    m = context.user_data.get('dep_m')
+    
+    # Validation for TrxID text
+    if not update.message.photo:
+        trx_text = update.message.text.strip()
+        # TrxID সাধারণত অক্ষর ও সংখ্যার মিশ্রণ হয় এবং অন্তত ৮-১২ ক্যারেক্টার হয়
+        if len(trx_text) < 6 or " " in trx_text or len(trx_text) > 20:
+            await update.message.reply_text(
+                "❌ **ভুল Transaction ID!**\n\n"
+                "অনুগ্রহ করে পেমেন্ট শেষ করার পর প্রাপ্ত সঠিক TrxID (যেমন: `3A4B5C6D7E`) অথবা পেমেন্টের স্ক্রিনশট পাঠাতুন।"
+            )
+            return PROOF
+
+    kbd = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Approve", callback_data=f"app_{u.id}_{a}"), InlineKeyboardButton("❌ Reject", callback_data=f"rej_{u.id}_{a}")]
+    ])
+    txt = (
+        f"📥 **নতুন ডিপোজিট রিকোয়েস্ট**\n"
+        f"👤 ইউজার: {u.first_name} (`{u.id}`)\n"
+        f"💳 মাধ্যম: {m.upper()}\n"
+        f"💰 পরিমাণ: {a:.2f} টাকা"
+    )
     
     if update.message.photo:
         await context.bot.send_photo(ADMIN_ID, photo=update.message.photo[-1].file_id, caption=txt, reply_markup=kbd, parse_mode="Markdown")
     else:
-        await context.bot.send_message(ADMIN_ID, text=f"{txt}\nTrxID: `{update.message.text}`", reply_markup=kbd, parse_mode="Markdown")
+        await context.bot.send_message(ADMIN_ID, text=f"{txt}\n🔑 TrxID: `{update.message.text.strip()}`", reply_markup=kbd, parse_mode="Markdown")
     
-    await update.message.reply_text("✅ Request Admin-e pathano hoyeche.")
+    await update.message.reply_text("✅ আপনার ডিপোজিট তথ্য জমা হয়েছে! এডমিন যাচাই করে দ্রুত ব্যালেন্স যুক্ত করে দেবেন।")
     return ConversationHandler.END
 
-# ----------------- Admin Commands & Google Sheet Auto Import -----------------
+async def dep_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("❌ ডিপোজিট প্রক্রিয়া বাতিল করা হয়েছে।")
+    return ConversationHandler.END
+
+# ----------------- Admin Action Callback -----------------
 async def admin_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-    if q.from_user.id != ADMIN_ID: return
-    act, target_id, amt = q.data.split("_")[0], int(q.data.split("_")[1]), float(q.data.split("_")[2])
+    if q.from_user.id != ADMIN_ID:
+        return
+        
+    parts = q.data.split("_")
+    act, target_id, amt = parts[0], int(parts[1]), float(parts[2])
     
     if act == "app":
         new_b = get_bal(target_id) + amt
         set_bal(target_id, new_b)
-        msg_txt = (q.message.caption if q.message.photo else q.message.text) + f"\n\n✅ APPROVED (+{amt} TK)"
-        if q.message.photo: await q.edit_message_caption(caption=msg_txt, parse_mode="Markdown")
-        else: await q.edit_message_text(text=msg_txt, parse_mode="Markdown")
-        try: await context.bot.send_message(target_id, f"🎉 {amt} TK Deposit Approved! Balance: {new_b:.2f} TK")
-        except: pass
+        msg_txt = (q.message.caption if q.message.photo else q.message.text) + f"\n\n✅ **APPROVED (+{amt:.2f} TK)**"
+        
+        if q.message.photo:
+            await q.edit_message_caption(caption=msg_txt, parse_mode="Markdown")
+        else:
+            await q.edit_message_text(text=msg_txt, parse_mode="Markdown")
+            
+        try:
+            await context.bot.send_message(target_id, f"🎉 আপনার **{amt:.2f} টাকা** ডিপোজিট সফল হয়েছে!\n💰 বর্তমান ব্যালেন্স: **{new_b:.2f} টাকা**")
+        except Exception:
+            pass
     else:
-        msg_txt = (q.message.caption if q.message.photo else q.message.text) + "\n\n❌ REJECTED"
-        if q.message.photo: await q.edit_message_caption(caption=msg_txt, parse_mode="Markdown")
-        else: await q.edit_message_text(text=msg_txt, parse_mode="Markdown")
+        msg_txt = (q.message.caption if q.message.photo else q.message.text) + "\n\n❌ **REJECTED**"
+        if q.message.photo:
+            await q.edit_message_caption(caption=msg_txt, parse_mode="Markdown")
+        else:
+            await q.edit_message_text(text=msg_txt, parse_mode="Markdown")
+            
+        try:
+            await context.bot.send_message(target_id, f"❌ দুঃখিত, আপনার **{amt:.2f} টাকার** ডিপোজিট রিকোয়েস্টটি প্রত্যাখান করা হয়েছে। সঠিক তথ্য দিয়ে আবার চেষ্টা করুন।")
+        except Exception:
+            pass
 
+# ----------------- Admin Commands -----------------
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == ADMIN_ID:
         msg = (
             "⚙️ **ADMIN PANEL COMMANDS**\n\n"
-            "📊 `/importsheet <Google_Sheet_Link>` - Google Sheet theke direct mail stock-e add korun\n"
-            "📬 `/addstock mail:pass` - Direct Text diye mail add korun\n"
-            "💰 `/addbalance USER_ID AMOUNT` - Balance comano/barano (Jemon: 50 ba -20)\n"
-            "🏷 `/setprice AMOUNT` - Mail unit price change korun\n"
-            "📊 `/adminstats` - Current stock status dekhoon"
+            "📊 `/importsheet <Link>` - Google Sheet থেকে সরাসরি মেইল যুক্ত করুন\n"
+            "📬 `/addstock mail:pass` - কমান্ডের মাধ্যমে মেইল যুক্ত করুন\n"
+            "💰 `/addbalance USER_ID AMOUNT` - ইউজারের ব্যালেন্স যোগ/বিয়োগ করুন\n"
+            "🏷 `/setprice AMOUNT` - প্রতি মেইলের দাম নির্ধারণ করুন\n"
+            "📊 `/adminstats` - বর্তমান স্টক ও হিসেব দেখুন\n"
+            "📢 `/broadcast বার্তা` - সকল ইউজারকে নোটিশ পাঠাতুন"
         )
         await update.message.reply_text(msg, parse_mode="Markdown")
 
 async def import_sheet(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID: return
+    if update.effective_user.id != ADMIN_ID:
+        return
     if not context.args:
-        await update.message.reply_text("⚠️ Rule: `/importsheet <Google_Sheet_Link>`", parse_mode="Markdown")
+        await update.message.reply_text("⚠️ ব্যবহার করার নিয়ম: `/importsheet <Google_Sheet_Link>`", parse_mode="Markdown")
         return
     
     url = context.args[0]
     match = re.search(r'/d/([a-zA-Z0-9-_]+)', url)
     if not match:
-        await update.message.reply_text("❌ Invalid Google Sheet link! Link dekhe abar pathan.")
+        await update.message.reply_text("❌ ভুল Google Sheet লিঙ্ক! সঠিক লিঙ্ক দিন।")
         return
     
     sheet_id = match.group(1)
@@ -233,22 +399,22 @@ async def import_sheet(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parts = line.strip().split(',')
                 if len(parts) >= 2:
                     m, p = parts[0].strip(), parts[1].strip()
-                    if m and p and m.lower() != "mail":  # Column Header Ignore
+                    if m and p and m.lower() != "mail":
                         item = f"{m}:{p}"
                         if item not in mail_stock:
                             mail_stock.append(item)
                             added += 1
-            await update.message.reply_text(f"✅ Google Sheet theke **{added}** ti mail stock-e add hoyeche!\n📦 Total Stock: {len(mail_stock)} Pcs", parse_mode="Markdown")
+            await update.message.reply_text(f"✅ Google Sheet থেকে **{added}** টি মেইল যোগ করা হয়েছে!\n📦 মোট স্টক: {len(mail_stock)} টি", parse_mode="Markdown")
         else:
-            await update.message.reply_text("❌ Sheet load hoyni! Link share setting **'Anyone with the link can view'** ache kina check korun.")
+            await update.message.reply_text("❌ Sheet লোড হয়নি! লিঙ্ক শেয়ার অপশন **'Anyone with the link'** করা আছে কিনা নিশ্চিত করুন।")
     except Exception as e:
-        await update.message.reply_text(f"⚠️ Error: {str(e)}")
+        await update.message.reply_text(f"⚠️ ত্রুটি: {str(e)}")
 
 async def add_stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == ADMIN_ID and context.args:
         new_mails = context.args
         mail_stock.extend(new_mails)
-        await update.message.reply_text(f"✅ Added {len(new_mails)} Mails! Total Stock: {len(mail_stock)}")
+        await update.message.reply_text(f"✅ সফলভাবে **{len(new_mails)}** টি মেইল যোগ হয়েছে! মোট স্টক: {len(mail_stock)}")
 
 async def add_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == ADMIN_ID and len(context.args) == 2:
@@ -256,52 +422,33 @@ async def add_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
             uid, amt = int(context.args[0]), float(context.args[1])
             new_bal = get_bal(uid) + amt
             set_bal(uid, new_bal)
-            await update.message.reply_text(f"✅ User `{uid}` er new balance: `{new_bal:.2f}` TK", parse_mode="Markdown")
-        except:
-            await update.message.reply_text("⚠️ Rule: `/addbalance USER_ID AMOUNT`", parse_mode="Markdown")
+            await update.message.reply_text(f"✅ ইউজার `{uid}` এর নতুন ব্যালেন্স: `{new_bal:.2f}` টাকা", parse_mode="Markdown")
+        except ValueError:
+            await update.message.reply_text("⚠️ ব্যবহার করার নিয়ম: `/addbalance USER_ID AMOUNT`", parse_mode="Markdown")
 
 async def set_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global unit_price
     if update.effective_user.id == ADMIN_ID and context.args:
         try:
             unit_price = float(context.args[0])
-            await update.message.reply_text(f"✅ Mail unit price: `{unit_price:.2f}` TK", parse_mode="Markdown")
-        except:
-            await update.message.reply_text("⚠ Rule: `/setprice 15`", parse_mode="Markdown")
+            await update.message.reply_text(f"✅ প্রতি মেইলের নতুন মূল্য: `{unit_price:.2f}` টাকা", parse_mode="Markdown")
+        except ValueError:
+            await update.message.reply_text("⚠️ ব্যবহার করার নিয়ম: `/setprice 1.5`", parse_mode="Markdown")
 
 async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == ADMIN_ID:
-        await update.message.reply_text(f"📊 Stock: {len(mail_stock)} pcs\n💎 Current Mail Price: {unit_price:.2f} TK")
+        total_users = len(get_all_users())
+        await update.message.reply_text(
+            f"📊 **স্টোর তথ্য:**\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"👥 মোট ইউজার: {total_users} জন\n"
+            f"📦 অবশিষ্ট স্টক: {len(mail_stock)} টি\n"
+            f"💎 বর্তমান মেইল মূল্য: {unit_price:.2f} টাকা",
+            parse_mode="Markdown"
+        )
 
-# ----------------- App Main Run -----------------
-if __name__ == "__main__":
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-
-    dep = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex('^(🏦 Deposit|💳 Deposit)$'), dep_start)],
-        states={
-            METHOD: [CallbackQueryHandler(dep_method, pattern="^d_")],
-            AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, dep_amount)],
-            PROOF: [MessageHandler((filters.PHOTO | filters.TEXT) & ~filters.COMMAND, dep_proof)]
-        },
-        fallbacks=[CommandHandler('cancel', lambda u, c: ConversationHandler.END)]
-    )
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("importsheet", import_sheet))
-    app.add_handler(CommandHandler("addstock", add_stock))
-    app.add_handler(CommandHandler("addbalance", add_balance))
-    app.add_handler(CommandHandler("setprice", set_price))
-    app.add_handler(CommandHandler("adminstats", admin_stats))
-    app.add_handler(dep)
-    app.add_handler(CallbackQueryHandler(shop_cb, pattern="^(qty_|confirm_|cancel_)"))
-    app.add_handler(CallbackQueryHandler(admin_cb, pattern="^(app_|rej_)"))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    # Broadcast command function
-async def broadcast_command(update, context):
-    user_id = update.effective_user.id
-    if user_id != ADMIN_ID:
+async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
         return
 
     if not context.args:
@@ -309,6 +456,8 @@ async def broadcast_command(update, context):
         return
 
     broadcast_text = " ".join(context.args)
+    all_users = get_all_users()
+    
     success_count = 0
     fail_count = 0
 
@@ -328,7 +477,46 @@ async def broadcast_command(update, context):
         parse_mode="Markdown"
     )
 
-app.add_handler(CommandHandler("broadcast", broadcast_command))
+# ----------------- Set Bot Commands Menu -----------------
+async def post_init(application):
+    # টেলিগ্রাম চ্যাটের ৩-লাইনের মেনুতে কমান্ড সেট করবে
+    commands = [
+        BotCommand("start", "বট পুনরায় শুরু করুন")
+    ]
+    await application.bot.set_my_commands(commands)
 
-print("Bot is running with SQLite database...")
-app.run_polling()
+# ----------------- App Initialization -----------------
+if __name__ == "__main__":
+    app_builder = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init)
+    app = app_builder.build()
+
+    dep = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex('^(🏦 ডিপোজিট|🏦 Deposit|💳 Deposit)$'), dep_start)
+        ],
+        states={
+            METHOD: [CallbackQueryHandler(dep_method, pattern="^(d_|cancel_dep)")],
+            AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, dep_amount)],
+            PROOF: [MessageHandler((filters.PHOTO | filters.TEXT) & ~filters.COMMAND, dep_proof)]
+        },
+        fallbacks=[
+            CommandHandler('cancel', dep_cancel),
+            MessageHandler(filters.Regex('^(💲 প্রডাক্ট কিনুন|👤 প্রোফাইল|💬 সাপোর্ট|⚙️ এডমিন প্যানেল|💲 Buy Product|👤 Profile|💬 Support|⚙️ Admin Panel)$'), dep_cancel)
+        ]
+    )
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("importsheet", import_sheet))
+    app.add_handler(CommandHandler("addstock", add_stock))
+    app.add_handler(CommandHandler("addbalance", add_balance))
+    app.add_handler(CommandHandler("setprice", set_price))
+    app.add_handler(CommandHandler("adminstats", admin_stats))
+    app.add_handler(CommandHandler("broadcast", broadcast_command))
+    
+    app.add_handler(dep)
+    app.add_handler(CallbackQueryHandler(shop_cb, pattern="^(qty_|confirm_|cancel_)"))
+    app.add_handler(CallbackQueryHandler(admin_cb, pattern="^(app_|rej_)"))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    print("Bot is running with SQLite database...")
+    app.run_polling()
