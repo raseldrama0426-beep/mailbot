@@ -50,7 +50,7 @@ DB_FILE = os.path.join(os.getcwd(), "bot_database.db")
 
 # Bot Main Data
 mail_stock = ["kelli.731@piepla.com:rasel24", "michal@piepla.com:rasel24"]
-support_user = "@earnikzone"  # Support ID
+support_user = "@PremiumStoreBD_Support"  # Support ID
 unit_price = 0.80  # Per Mail Price
 
 # Conversation States
