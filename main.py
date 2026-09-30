@@ -79,12 +79,12 @@ def get_all_users():
 # ----------------- Keyboards -----------------
 def get_kbd(is_admin):
     kbd = [
-        [KeyboardButton("💲 প্রডাক্ট কিনুন")],
-        [KeyboardButton("👤 প্রোফাইল"), KeyboardButton("🏦 ডিপোজিট")],
-        [KeyboardButton("💬 সাপোর্ট")]
+        [KeyboardButton("🛍️ প্রডাক্ট কিনুন 🎀")],
+        [KeyboardButton("🌸 প্রোফাইল"), KeyboardButton("💳 ডিপোজিট")],
+        [KeyboardButton("💬 সাপোর্ট ✨")]
     ]
     if is_admin:
-        kbd.append([KeyboardButton("⚙️ এডমিন প্যানেল")])
+        kbd.append([KeyboardButton("⚙️ এডমিন প্যানেল 👑")])
     return ReplyKeyboardMarkup(kbd, resize_keyboard=True)
 
 # ----------------- Core Commands -----------------
@@ -95,8 +95,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         set_bal(uid, 0.0)
     
     msg = (
-        "<b>👋 স্বাগতম আমাদের প্রিমিয়াম স্টোরে!</b>\n\n"
-        "আপনার প্রয়োজনীয় সেবা পেতে নিচের মেনু থেকে অপশন সিলেক্ট করুন:"
+        "<b>🎀 স্বাগতম আমাদের কিউট প্রিমিয়াম স্টোরে! (⁠◕⁠‿⁠◕⁠✿⁠)</b>\n\n"
+        "আপনার প্রয়োজনীয় সেবা পেতে নিচের মেনু থেকে অপশন সিলেক্ট করুন ⬇️✨"
     )
     await update.message.reply_text(msg, reply_markup=get_kbd(uid == ADMIN_ID), parse_mode="HTML")
 
@@ -105,29 +105,35 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = user.id
     bal = get_bal(uid)
     profile_msg = (
-        "<b>👤 আপনার প্রোফাইল বিবরণী</b>\n"
+        "<b>🌸 আপনার প্রোফাইল বিবরণী (⁠•̀⁠ᴗ⁠-⁠)⁠✧</b>\n"
         "━━━━━━━━━━━━━━━━━━━\n"
         f"🆔 <b>ইউজার আইডি:</b> <code>{uid}</code>\n"
-        f"📛 <b>নাম:</b> {user.first_name}\n"
-        f"💰 <b>বর্তমান ব্যালেন্স:</b> <code>{bal:.2f}</code> টাকা"
+        f"📛 <b>নাম:</b> {user.first_name} ✨\n"
+        f"💰 <b>বর্তমান ব্যালেন্স:</b> <code>{bal:.2f}</code> টাকা 🍓"
     )
     await update.message.reply_text(profile_msg, parse_mode="HTML")
 
 async def show_support(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(f"💬 <b>আমাদের সাপোর্ট টিম:</b> {support_user}\n\nযেকোনো সহায়তার জন্য মেসেজ দিন।", parse_mode="HTML")
+    await update.message.reply_text(
+        f"<b>💬 সাপোর্ট টিম (⁠っ⁠.⁠❛⁠ ⁠ᴗ⁠ ⁠❛⁠.⁠)⁠っ</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"🎀 <b>আমাদের হেল্পার:</b> {support_user}\n\n"
+        "যেকোনো সহায়তার জন্য নিঃসংকোচে মেসেজ দিন! ✨", 
+        parse_mode="HTML"
+    )
 
 async def start_deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['state'] = 'DEP_METHOD'
     kbd = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🟢 bKash", callback_data="d_bkash"), InlineKeyboardButton("🔴 Nagad", callback_data="d_nagad")],
-        [InlineKeyboardButton("🟣 Rocket", callback_data="d_rocket")],
+        [InlineKeyboardButton("bKash 💖", callback_data="d_bkash"), InlineKeyboardButton("Nagad 🧡", callback_data="d_nagad")],
+        [InlineKeyboardButton("Rocket 💜", callback_data="d_rocket")],
         [InlineKeyboardButton("❌ বাতিল করুন", callback_data="cancel_dep")]
     ])
     msg = (
-        "<b>🏦 ডিপোজিট সিস্টেম</b>\n"
+        "<b>💳 ডিপোজিট সিস্টেম 🍡</b>\n"
         "━━━━━━━━━━━━━━━━━━━\n"
-        f"💡 সর্বনিম্ন ডিপোজিট: <b>{MIN_DEPOSIT:.0f} টাকা</b>\n\n"
-        "অনুগ্রহ করে আপনার পছন্দের <b>Payment Method</b> সিলেক্ট করুন:"
+        f"💡 সর্বনিম্ন ডিপোজিট: <b>{MIN_DEPOSIT:.0f} টাকা</b> 💸\n\n"
+        "অনুগ্রহ করে আপনার পছন্দের <b>Payment Method</b> সিলেক্ট করুন 🐾:"
     )
     await update.message.reply_text(msg, reply_markup=kbd, parse_mode="HTML")
 
@@ -153,7 +159,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif "প্রডাক্ট" in raw_text or "product" in text or "কিনুন" in raw_text or "buy" in text:
         context.user_data.clear()
         if not mail_stock:
-            await update.message.reply_text("❌ দুঃখিত! বর্তমানে স্টকে কোনো মেইল নেই।")
+            await update.message.reply_text("😿 দুঃখিত! বর্তমানে স্টকে কোনো মেইল নেই।")
             return
         context.user_data['qty'] = 1
         await send_shop_menu(update.message, context, is_edit=False)
@@ -177,31 +183,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['state'] = None
             await send_shop_menu(update.message, context, is_edit=False)
         else:
-            await update.message.reply_text("⚠️ অনুগ্রহ করে সঠিক একটি সংখ্যা লিখুন:")
+            await update.message.reply_text("⚠️ (⁠•⁠-⁠•⁠) সঠিক একটি সংখ্যা লিখে জানান প্লিজ:")
         return
 
     elif state == 'DEP_AMOUNT':
         try:
             amt = float(raw_text)
             if amt < MIN_DEPOSIT:
-                await update.message.reply_text(f"❌ সর্বনিম্ন ডিপোজিট <b>{MIN_DEPOSIT:.0f} টাকা</b>। অনুগ্রহ করে সঠিক পরিমাণ লিখুন:", parse_mode="HTML")
+                await update.message.reply_text(f"❌ সর্বনিম্ন ডিপোজিট <b>{MIN_DEPOSIT:.0f} টাকা</b>। সঠিক পরিমাণ লিখুন ✨:", parse_mode="HTML")
                 return
             context.user_data['dep_a'] = amt
             context.user_data['state'] = 'DEP_PROOF'
             m = context.user_data.get('dep_m', 'bkash')
             num = BKASH_NUMBER if m == "bkash" else (NAGAD_NUMBER if m == "nagad" else ROCKET_NUMBER)
-            method_name = "bKash" if m == "bkash" else ("Nagad" if m == "nagad" else "Rocket")
+            method_name = "bKash 💖" if m == "bkash" else ("Nagad 🧡" if m == "nagad" else "Rocket 💜")
             instructions = (
                 f"📥 <b>{method_name} Personal Number:</b> <code>{num}</code>\n"
                 "━━━━━━━━━━━━━━━━━━━\n"
-                f"💵 মোট জমার পরিমাণ: <b>{amt:.2f} টাকা</b>\n\n"
-                "📌 <b>নির্দেশনা:</b>\n"
+                f"💵 মোট জমার পরিমাণ: <b>{amt:.2f} টাকা</b> 🌸\n\n"
+                "📌 <b>নির্দেশনা (⁠◕⁠‿⁠◕⁠):</b>\n"
                 "১. উপরের নম্বরে <b>Send Money</b> করুন।\n"
-                "২. টাকা পাঠানোর পর পাওয়া <b>Transaction ID (TrxID)</b> অথবা পেমেন্টের <b>স্ক্রিনশট</b> এখানে মেসেজ দিন।"
+                "২. পেমেন্টের পর পাওয়া <b>TrxID</b> বা <b>স্ক্রিনশট</b> সেন্ড করুন ✨"
             )
             await update.message.reply_text(instructions, parse_mode="HTML")
         except ValueError:
-            await update.message.reply_text("❌ অনুগ্রহ করে শুধু সংখ্যার মাধ্যমে টাকার পরিমাণ লিখুন (যেমন: 50):")
+            await update.message.reply_text("❌ শুধু সংখ্যার মাধ্যমে টাকা লিখুন (যেমন: 50):")
         return
 
     elif state == 'DEP_PROOF':
@@ -217,8 +223,8 @@ async def process_dep_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
         trx_text = update.message.text.strip()
         if len(trx_text) < 6 or " " in trx_text or len(trx_text) > 20:
             await update.message.reply_text(
-                "❌ <b>ভুল Transaction ID!</b>\n\n"
-                "অনুগ্রহ করে পেমেন্ট শেষ করার পর প্রাপ্ত সঠিক TrxID অথবা পেমেন্টের স্ক্রিনশট পাঠান।",
+                "❌ <b>ভুল Transaction ID! (⁠>⁠&lt;⁠)</b>\n\n"
+                "অনুগ্রহ করে সঠিক TrxID অথবা পেমেন্টের স্ক্রিনশট পাঠান।",
                 parse_mode="HTML"
             )
             return
@@ -228,10 +234,10 @@ async def process_dep_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("✅ Approve", callback_data=f"app_{u.id}_{a}"), InlineKeyboardButton("❌ Reject", callback_data=f"rej_{u.id}_{a}")]
     ])
     txt = (
-        f"📥 <b>নতুন ডিপোজিট রিকোয়েস্ট</b>\n"
+        f"📥 <b>নতুন ডিপোজিট রিকোয়েস্ট ✨</b>\n"
         f"👤 ইউজার: {u.first_name} (<code>{u.id}</code>)\n"
         f"💳 মাধ্যম: {m.upper()}\n"
-        f"💰 পরিমাণ: {a:.2f} টাকা"
+        f"💰 পরিমাণ: {a:.2f} টাকা 🍓"
     )
     
     if update.message.photo:
@@ -239,7 +245,7 @@ async def process_dep_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await context.bot.send_message(ADMIN_ID, text=f"{txt}\n🔑 TrxID: <code>{update.message.text.strip()}</code>", reply_markup=kbd, parse_mode="HTML")
     
-    await update.message.reply_text("✅ আপনার ডিপোজিট তথ্য জমা হয়েছে! এডমিন যাচাই করে দ্রুত ব্যালেন্স যুক্ত করে দেবেন।")
+    await update.message.reply_text("✅ আপনার ডিপোজিট তথ্য জমা হয়েছে! এডমিন খুব দ্রুত চেক করে দেবে (⁠◕⁠‿⁠◕⁠✿⁠)")
 
 # ----------------- Shop / Buy System -----------------
 async def send_shop_menu(msg_obj, context, is_edit=True):
@@ -253,20 +259,20 @@ async def send_shop_menu(msg_obj, context, is_edit=True):
             InlineKeyboardButton(f"📦 {qty} টি", callback_data="qty_val"),
             InlineKeyboardButton("➕", callback_data="qty_inc")
         ],
-        [InlineKeyboardButton("✏️ কাস্টম পরিমাণ লিখুন", callback_data="qty_custom")],
+        [InlineKeyboardButton("✏️ কাস্টম পরিমাণ লিখুন 🌸", callback_data="qty_custom")],
         [
-            InlineKeyboardButton("✅ অর্ডার নিশ্চিত করুন", callback_data="confirm_buy"),
-            InlineKeyboardButton("❌ বাতিল", callback_data="cancel_buy")
+            InlineKeyboardButton("✅ নিশ্চিত করুন ✨", callback_data="confirm_buy"),
+            InlineKeyboardButton("❌ বাতিল 😿", callback_data="cancel_buy")
         ]
     ])
     
     txt = (
-        "🌟 <b>Meta AI ID (স্টোর পণ্য)</b>\n"
+        "🌟 <b>Meta AI ID (স্টোর পণ্য) 🍓</b>\n"
         "━━━━━━━━━━━━━━━━━━━\n"
         f"💎 <b>একক মূল্য:</b> {unit_price:.2f} টাকা\n"
-        f"📦 <b>মোট স্টক আছে:</b> {stock} টি\n"
+        f"📦 <b>স্টক আছে:</b> {stock} টি\n"
         f"📊 <b>নির্বাচিত পরিমাণ:</b> {qty} টি\n"
-        f"💰 <b>মোট দেয় মূল্য:</b> {total:.2f} টাকা"
+        f"💰 <b>মোট দেয় মূল্য:</b> {total:.2f} টাকা 🎀"
     )
     if is_edit:
         await msg_obj.edit_message_text(txt, reply_markup=kbd, parse_mode="HTML")
@@ -288,16 +294,16 @@ async def shop_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_shop_menu(query, context, is_edit=True)
     elif data == "qty_custom":
         context.user_data['state'] = 'WAITING_QTY'
-        await query.message.reply_text("✏️ আপনি কতটি কিনতে চান? সংখ্যাটি লিখে দিন:")
+        await query.message.reply_text("✏️ কতটি কিনতে চান? সংখ্যাটি লিখে দিন 🌸:")
     elif data == "confirm_buy":
         qty = context.user_data.get('qty', 1)
         total = unit_price * qty
         bal = get_bal(uid)
         
         if len(mail_stock) < qty:
-            await query.edit_message_text("❌ পর্যাপ্ত স্টক নেই! দুঃখিত।")
+            await query.edit_message_text("😿 পর্যাপ্ত স্টক নেই! দুঃখিত।")
         elif bal < total:
-            await query.edit_message_text(f"❌ আপনার পর্যাপ্ত ব্যালেন্স নেই!\n\nপ্রয়োজন: {total:.2f} টাকা\nআপনার আছে: {bal:.2f} টাকা")
+            await query.edit_message_text(f"😿 আপনার পর্যাপ্ত ব্যালেন্স নেই!\n\nপ্রয়োজন: {total:.2f} টাকা\nআপনার আছে: {bal:.2f} টাকা")
         else:
             items = [mail_stock.pop(0) for _ in range(qty)]
             set_bal(uid, bal - total)
@@ -311,15 +317,15 @@ async def shop_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     formatted_items.append(f"📦 <code>{item}</code>")
             
             out_txt = (
-                "🎉 <b>অর্ডার সফল হয়েছে!</b>\n"
+                "🎉 <b>অর্ডার সফল হয়েছে! (⁠✿⁠^⁠‿⁠^⁠)</b>\n"
                 "━━━━━━━━━━━━━━━━━━━\n"
-                "আপনার ক্রয়কৃত একাউন্ট তথ্য নিচে দেওয়া হলো:\n\n" + "\n".join(formatted_items)
+                "আপনার একাউন্ট তথ্য নিচে দেওয়া হলো ✨:\n\n" + "\n".join(formatted_items)
             )
             await query.edit_message_text(out_txt, parse_mode="HTML")
             
     elif data == "cancel_buy":
         context.user_data.clear()
-        await query.edit_message_text("❌ অর্ডার বাতিল করা হয়েছে।")
+        await query.edit_message_text("❌ অর্ডার বাতিল করা হয়েছে (⁠⁠•⁠-⁠•⁠)")
 
 # ----------------- Admin Action Callbacks -----------------
 async def admin_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -334,7 +340,7 @@ async def admin_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if act == "app":
         new_b = get_bal(target_id) + amt
         set_bal(target_id, new_b)
-        msg_txt = (q.message.caption if q.message.photo else q.message.text) + f"\n\n✅ <b>APPROVED (+{amt:.2f} TK)</b>"
+        msg_txt = (q.message.caption if q.message.photo else q.message.text) + f"\n\n✅ <b>APPROVED (+{amt:.2f} TK) ✨</b>"
         
         if q.message.photo:
             await q.edit_message_caption(caption=msg_txt, parse_mode="HTML")
@@ -342,7 +348,7 @@ async def admin_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.edit_message_text(text=msg_txt, parse_mode="HTML")
             
         try:
-            await context.bot.send_message(target_id, f"🎉 আপনার <b>{amt:.2f} টাকা</b> ডিপোজিট সফল হয়েছে!\n💰 বর্তমান ব্যালেন্স: <b>{new_b:.2f} টাকা</b>", parse_mode="HTML")
+            await context.bot.send_message(target_id, f"🎉 আপনার <b>{amt:.2f} টাকা</b> ডিপোজিট সফল হয়েছে (⁠✿⁠^⁠‿⁠^⁠)!\n💰 বর্তমান ব্যালেন্স: <b>{new_b:.2f} টাকা</b> 🍓", parse_mode="HTML")
         except Exception:
             pass
     else:
@@ -353,7 +359,7 @@ async def admin_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.edit_message_text(text=msg_txt, parse_mode="HTML")
             
         try:
-            await context.bot.send_message(target_id, f"❌ দুঃখিত, আপনার <b>{amt:.2f} টাকার</b> ডিপোজিট রিকোয়েস্টটি প্রত্যাখান করা হয়েছে।", parse_mode="HTML")
+            await context.bot.send_message(target_id, f"😿 আপনার <b>{amt:.2f} টাকার</b> ডিপোজিট রিকোয়েস্টটি প্রত্যাখান করা হয়েছে।", parse_mode="HTML")
         except Exception:
             pass
 
@@ -371,11 +377,11 @@ async def dep_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['dep_m'] = m
     context.user_data['state'] = 'DEP_AMOUNT'
     
-    method_name = "bKash" if m == "bkash" else ("Nagad" if m == "nagad" else "Rocket")
+    method_name = "bKash 💖" if m == "bkash" else ("Nagad 🧡" if m == "nagad" else "Rocket 💜")
     
     await q.edit_message_text(
-        f"✅ আপনি <b>{method_name}</b> বেছে নিয়েছেন।\n\n"
-        f"💰 আপনি কত টাকা ডিপোজিট করতে চান? (সর্বনিম্ন {MIN_DEPOSIT:.0f} টাকা লিখে পাঠান):",
+        f"✅ আপনি <b>{method_name}</b> বেছে নিয়েছেন ✨\n\n"
+        f"💰 কত টাকা ডিপোজিট করতে চান? (সর্বনিম্ন {MIN_DEPOSIT:.0f} টাকা লিখুন 🌸):",
         parse_mode="HTML"
     )
 
@@ -383,10 +389,11 @@ async def dep_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == ADMIN_ID:
         msg = (
-            "⚙️ <b>ADMIN PANEL COMMANDS</b>\n\n"
-            "📊 <code>/importsheet &lt;Link&gt;</code> - Google Sheet থেকে সরাসরি মেইল যুক্ত করুন\n"
-            "📬 <code>/addstock mail:pass</code> - কমান্ডের মাধ্যমে মেইল যুক্ত করুন\n"
+            "⚙️ <b>ADMIN PANEL COMMANDS 👑</b>\n\n"
+            "📊 <code>/importsheet &lt;Link&gt;</code> - Google Sheet থেকে মেইল যুক্ত করুন\n"
+            "📬 <code>/addstock mail:pass</code> - সরাসরি মেইল যুক্ত করুন\n"
             "💰 <code>/addbalance USER_ID AMOUNT</code> - ইউজারের ব্যালেন্স যোগ/বিয়োগ করুন\n"
+            "📊 <code>/allbalances</code> - সকল ইউজারের ব্যালেন্স দেখুন\n"
             "🏷 <code>/setprice AMOUNT</code> - প্রতি মেইলের দাম নির্ধারণ করুন\n"
             "📊 <code>/adminstats</code> - বর্তমান স্টক ও হিসেব দেখুন\n"
             "📢 <code>/broadcast বার্তা</code> - সকল ইউজারকে নোটিশ পাঠান"
@@ -397,13 +404,13 @@ async def import_sheet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
     if not context.args:
-        await update.message.reply_text("⚠️ ব্যবহার করার নিয়ম: <code>/importsheet &lt;Google_Sheet_Link&gt;</code>", parse_mode="HTML")
+        await update.message.reply_text("⚠️ ব্যবহারবিধি: <code>/importsheet &lt;Google_Sheet_Link&gt;</code>", parse_mode="HTML")
         return
     
     url = context.args[0]
     match = re.search(r'/d/([a-zA-Z0-9-_]+)', url)
     if not match:
-        await update.message.reply_text("❌ ভুল Google Sheet লিঙ্ক! সঠিক লিঙ্ক দিন।")
+        await update.message.reply_text("❌ ভুল Google Sheet লিঙ্ক!")
         return
     
     sheet_id = match.group(1)
@@ -423,9 +430,9 @@ async def import_sheet(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         if item not in mail_stock:
                             mail_stock.append(item)
                             added += 1
-            await update.message.reply_text(f"✅ Google Sheet থেকে <b>{added}</b> টি মেইল যোগ করা হয়েছে!\n📦 মোট স্টক: {len(mail_stock)} টি", parse_mode="HTML")
+            await update.message.reply_text(f"✅ Google Sheet থেকে <b>{added}</b> টি মেইল যোগ করা হয়েছে! ✨\n📦 মোট স্টক: {len(mail_stock)} টি", parse_mode="HTML")
         else:
-            await update.message.reply_text("❌ Sheet লোড হয়নি! লিঙ্ক শেয়ার অপশন <b>'Anyone with the link'</b> করা আছে কিনা নিশ্চিত করুন।", parse_mode="HTML")
+            await update.message.reply_text("❌ Sheet লোড হয়নি! লিঙ্কটি Public করা আছে কিনা নিশ্চিত করুন।", parse_mode="HTML")
     except Exception as e:
         await update.message.reply_text(f"⚠️ ত্রুটি: {str(e)}")
 
@@ -433,7 +440,7 @@ async def add_stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == ADMIN_ID and context.args:
         new_mails = context.args
         mail_stock.extend(new_mails)
-        await update.message.reply_text(f"✅ সফলভাবে <b>{len(new_mails)}</b> টি মেইল যোগ হয়েছে! মোট স্টক: {len(mail_stock)}", parse_mode="HTML")
+        await update.message.reply_text(f"✅ <b>{len(new_mails)}</b> টি মেইল যোগ হয়েছে! মোট স্টক: {len(mail_stock)} ✨", parse_mode="HTML")
 
 async def add_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == ADMIN_ID and len(context.args) == 2:
@@ -441,28 +448,43 @@ async def add_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
             uid, amt = int(context.args[0]), float(context.args[1])
             new_bal = get_bal(uid) + amt
             set_bal(uid, new_bal)
-            await update.message.reply_text(f"✅ ইউজার <code>{uid}</code> এর নতুন ব্যালেন্স: <code>{new_bal:.2f}</code> টাকা", parse_mode="HTML")
+            await update.message.reply_text(f"✅ ইউজার <code>{uid}</code> এর নতুন ব্যালেন্স: <code>{new_bal:.2f}</code> টাকা 🍓", parse_mode="HTML")
         except ValueError:
-            await update.message.reply_text("⚠️ ব্যবহার করার নিয়ম: <code>/addbalance USER_ID AMOUNT</code>", parse_mode="HTML")
+            await update.message.reply_text("⚠️ ব্যবহারবিধি: <code>/addbalance USER_ID AMOUNT</code>", parse_mode="HTML")
+
+async def all_balances(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    users = db_query("SELECT user_id, balance FROM users", fetchall=True)
+    if not users:
+        await update.message.reply_text("❌ কোনো ইউজার পাওয়া যায়নি।", parse_mode="HTML")
+        return
+
+    text = "<b>📊 সকল ইউজারের ব্যালেন্স তালিকা 🌸:</b>\n━━━━━━━━━━━━━━━━━━━\n"
+    for uid, bal in users:
+        text += f"👤 ID: <code>{uid}</code> | 💰 Balance: <code>{bal:.2f}</code> টাকা\n"
+
+    await update.message.reply_text(text, parse_mode="HTML")
 
 async def set_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global unit_price
     if update.effective_user.id == ADMIN_ID and context.args:
         try:
             unit_price = float(context.args[0])
-            await update.message.reply_text(f"✅ প্রতি মেইলের নতুন মূল্য: <code>{unit_price:.2f}</code> টাকা", parse_mode="HTML")
+            await update.message.reply_text(f"✅ নতুন মূল্য: <code>{unit_price:.2f}</code> টাকা ✨", parse_mode="HTML")
         except ValueError:
-            await update.message.reply_text("⚠️ ব্যবহার করার নিয়ম: <code>/setprice 1.5</code>", parse_mode="HTML")
+            await update.message.reply_text("⚠️ ব্যবহারবিধি: <code>/setprice 1.5</code>", parse_mode="HTML")
 
 async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == ADMIN_ID:
         total_users = len(get_all_users())
         await update.message.reply_text(
-            f"📊 <b>স্টোর তথ্য:</b>\n"
+            f"📊 <b>স্টোর তথ্য 🌸:</b>\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
             f"👥 মোট ইউজার: {total_users} জন\n"
             f"📦 অবশিষ্ট স্টক: {len(mail_stock)} টি\n"
-            f"💎 বর্তমান মেইল মূল্য: {unit_price:.2f} টাকা",
+            f"💎 বর্তমান মূল্য: {unit_price:.2f} টাকা ✨",
             parse_mode="HTML"
         )
 
@@ -471,7 +493,7 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not context.args:
-        await update.message.reply_text("⚠️ ব্যবহার করার নিয়ম:\n<code>/broadcast আপনার বার্তা</code>", parse_mode="HTML")
+        await update.message.reply_text("⚠️ ব্যবহারবিধি:\n<code>/broadcast আপনার বার্তা</code>", parse_mode="HTML")
         return
 
     broadcast_text = " ".join(context.args)
@@ -484,13 +506,13 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     for uid in all_users:
         try:
-            await context.bot.send_message(chat_id=uid, text=f"📢 <b>ADMIN NOTICE</b> 📢\n\n{broadcast_text}", parse_mode="HTML")
+            await context.bot.send_message(chat_id=uid, text=f"📢 <b>ADMIN NOTICE 🌸</b>\n\n{broadcast_text}", parse_mode="HTML")
             success_count += 1
         except Exception:
             fail_count += 1
 
     await status_msg.edit_text(
-        f"✅ <b>ব্রডকাস্ট সম্পন্ন হয়েছে!</b>\n\n"
+        f"✅ <b>ব্রডকাস্ট সম্পন্ন হয়েছে! ✨</b>\n\n"
         f"🎯 সফল: {success_count} জন\n"
         f"❌ ব্যর্থ/ব্লকড: {fail_count} জন",
         parse_mode="HTML"
@@ -503,7 +525,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 # ----------------- Set Bot Commands Menu -----------------
 async def post_init(application):
     commands = [
-        BotCommand("start", "বট পুনরায় শুরু করুন")
+        BotCommand("start", "বট পুনরায় শুরু করুন 🌸")
     ]
     await application.bot.set_my_commands(commands)
 
@@ -517,6 +539,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("importsheet", import_sheet))
     app.add_handler(CommandHandler("addstock", add_stock))
     app.add_handler(CommandHandler("addbalance", add_balance))
+    app.add_handler(CommandHandler("allbalances", all_balances))
     app.add_handler(CommandHandler("setprice", set_price))
     app.add_handler(CommandHandler("adminstats", admin_stats))
     app.add_handler(CommandHandler("broadcast", broadcast_command))
@@ -530,5 +553,5 @@ if __name__ == "__main__":
 
     app.add_error_handler(error_handler)
 
-    print("Bot is running with HTML safe parsing...")
+    print("Bot is running with HTML safe parsing & cute vibes...")
     app.run_polling()
