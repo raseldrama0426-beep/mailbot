@@ -1,9 +1,9 @@
 import os
+import threading
 import logging
 import sqlite3
 import requests
 import re
-import threading
 from flask import Flask
 from telegram import (
     Update,
@@ -23,32 +23,37 @@ from telegram.ext import (
     filters
 )
 
-# ----------------- Flask App for UptimeRobot -----------------
+# ----------------- Flask Server for Keeping Alive -----------------
 app = Flask(__name__)
 
-@app.route('/')
+@app.route("/")
 def home():
-    return "Bot is active and running!"
+    return "Bot is running perfectly!"
 
 def run_flask():
-    port = int(os.environ.get("PORT", 10000))
+    port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
 
-# ----------------- Configuration Settings -----------------
-BOT_TOKEN = "8803998786:AAGm8heUXaFS7T338B-D7y5UW0WbdyFFkoI"  # আপনার বট টোকেন দিন
-ADMIN_ID = 7792142088               # Admin ID
+threading.Thread(target=run_flask, daemon=True).start()
 
+# ----------------- Configuration Settings -----------------
+BOT_TOKEN = "8803998786:AAHnmue-EM-uLp09jlXwrCxj_bUrqv6mw54"  # Apnar Bot Token
+ADMIN_ID = 8967812900                                      # Admin ID
+
+# Payment Numbers
 BKASH_NUMBER = "01766872406"
 NAGAD_NUMBER = "01821826206"
 ROCKET_NUMBER = "01766872406"
 
 MIN_DEPOSIT = 20.0
-DB_FILE = "bot_database.db"
+DB_FILE = os.path.join(os.getcwd(), "bot_database.db")
 
+# Bot Main Data
 mail_stock = ["kelli.731@piepla.com:rasel24", "michal@piepla.com:rasel24"]
 support_user = "@PremiumStoreBD_Support"  # Support ID
-unit_price = 0.80
+unit_price = 0.80  # Per Mail Price
 
+# Conversation States
 METHOD, AMOUNT, PROOF = range(3)
 
 logging.basicConfig(level=logging.INFO)
@@ -80,7 +85,7 @@ def get_all_users():
 # ----------------- Keyboards -----------------
 def get_kbd(is_admin):
     kbd = [
-        [KeyboardButton("প্রডাক্ট কিনুন")],
+        [KeyboardButton("💲 প্রডাক্ট কিনুন")],
         [KeyboardButton("👤 প্রোফাইল"), KeyboardButton("🏦 ডিপোজিট")],
         [KeyboardButton("💬 সাপোর্ট")]
     ]
@@ -88,7 +93,7 @@ def get_kbd(is_admin):
         kbd.append([KeyboardButton("⚙️ এডমিন প্যানেল")])
     return ReplyKeyboardMarkup(kbd, resize_keyboard=True)
 
-MENU_REGEX = r'^(👤 প্রোফাইল|👤 Profile|প্রডাক্ট কিনুন|💲 প্রডাক্ট কিনুন|💲 Buy Product|🛒 Buy Product|💬 সাপোর্ট|💬 Support|⚙️ এডমিন প্যানেল|⚙ Admin Panel|⚙️ এডমিন প্যানেল|🏦 ডিপোজিট|🏦 Deposit|💳 Deposit)$'
+MENU_REGEX = '^(👤 প্রোফাইল|👤 Profile|💲 প্রডাক্ট কিনুন|💲 Buy Product|🛒 Buy Product|💬 সাপোর্ট|💬 Support|⚙️ এডমিন প্যানেল|⚙ Admin Panel|⚙️ Admin Panel|🏦 ডিপোজিট|🏦 Deposit|💳 Deposit)$'
 
 # ----------------- Core Commands -----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -103,19 +108,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg, reply_markup=get_kbd(uid == ADMIN_ID), parse_mode="Markdown")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip()
+    text = update.message.text
     user = update.effective_user
     uid = user.id
     
-    # 1. Direct Support Button Check (Instant Response)
-    if "সাপোর্ট" in text or "Support" in text or "support" in text or "💬" in text:
-        await update.message.reply_text(
-            f"💬 **আমাদের সাপোর্ট টিম:** {support_user}\n\nযেকোনো সহায়তার জন্য মেসেজ দিন।", 
-            parse_mode="Markdown"
-        )
-        return
-
-    # 2. Custom Quantity Handler
     if context.user_data.get('waiting_qty'):
         if re.match(MENU_REGEX, text):
             context.user_data['waiting_qty'] = False
@@ -129,8 +125,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
     bal = get_bal(uid)
-
-    # 3. Profile
     if text in ["👤 প্রোফাইল", "👤 Profile"]:
         profile_msg = (
             "👤 **আপনার প্রোফাইল বিবরণী**\n"
@@ -141,16 +135,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await update.message.reply_text(profile_msg, parse_mode="Markdown")
         
-    # 4. Buy Product
-    elif text in ["প্রডাক্ট কিনুন", "💲 প্রডাক্ট কিনুন", "💲 Buy Product", "🛒 Buy Product"]:
+    elif text in ["💲 প্রডাক্ট কিনুন", "💲 Buy Product", "🛒 Buy Product"]:
         if not mail_stock:
             await update.message.reply_text("❌ দুঃখিত! বর্তমানে স্টকে কোনো মেইল নেই।")
             return
         context.user_data['qty'] = 1
         await send_shop_menu(update.message, context, is_edit=False)
         
-    # 5. Admin Panel
-    elif text in ["⚙️ এডমিন প্যানেল", "⚙ Admin Panel", "⚙️ এডমিন প্যানেল"] and uid == ADMIN_ID:
+    elif text in ["💬 সাপোর্ট", "💬 Support"]:
+        await update.message.reply_text(f"💬 **আমাদের সাপোর্ট টিম:** {support_user}\n\nযেকোনো সহায়তার জন্য মেসেজ দিন।", parse_mode="Markdown")
+        
+    elif text in ["⚙️ এডমিন প্যানেল", "⚙ Admin Panel", "⚙️ Admin Panel"] and uid == ADMIN_ID:
         await admin_panel(update, context)
 
 # ----------------- Shop / Buy System -----------------
@@ -485,7 +480,7 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await status_msg.edit_text(
         f"✅ **ব্রডকাস্ট সম্পন্ন হয়েছে!**\n\n"
         f"🎯 সফল: {success_count} জন\n"
-        f"❌ ব্যর্থ/ব্লکড: {fail_count} জন",
+        f"❌ ব্যর্থ/ব্লকড: {fail_count} জন",
         parse_mode="Markdown"
     )
 
@@ -496,14 +491,10 @@ async def post_init(application):
     ]
     await application.bot.set_my_commands(commands)
 
-# ----------------- Main Runner -----------------
+# ----------------- App Initialization -----------------
 if __name__ == "__main__":
-    # Start Flask in a background thread for UptimeRobot
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.daemon = True
-    flask_thread.start()
-
-    bot_app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
+    app_builder = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init)
+    app = app_builder.build()
 
     dep = ConversationHandler(
         entry_points=[
@@ -529,18 +520,18 @@ if __name__ == "__main__":
         ]
     )
 
-    bot_app.add_handler(CommandHandler("start", start))
-    bot_app.add_handler(CommandHandler("importsheet", import_sheet))
-    bot_app.add_handler(CommandHandler("addstock", add_stock))
-    bot_app.add_handler(CommandHandler("addbalance", add_balance))
-    bot_app.add_handler(CommandHandler("setprice", set_price))
-    bot_app.add_handler(CommandHandler("adminstats", admin_stats))
-    bot_app.add_handler(CommandHandler("broadcast", broadcast_command))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("importsheet", import_sheet))
+    app.add_handler(CommandHandler("addstock", add_stock))
+    app.add_handler(CommandHandler("addbalance", add_balance))
+    app.add_handler(CommandHandler("setprice", set_price))
+    app.add_handler(CommandHandler("adminstats", admin_stats))
+    app.add_handler(CommandHandler("broadcast", broadcast_command))
     
-    bot_app.add_handler(dep)
-    bot_app.add_handler(CallbackQueryHandler(shop_cb, pattern="^(qty_|confirm_|cancel_)"))
-    bot_app.add_handler(CallbackQueryHandler(admin_cb, pattern="^(app_|rej_)"))
-    bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(dep)
+    app.add_handler(CallbackQueryHandler(shop_cb, pattern="^(qty_|confirm_|cancel_)"))
+    app.add_handler(CallbackQueryHandler(admin_cb, pattern="^(app_|rej_)"))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    print("Bot and Flask server starting...")
-    bot_app.run_polling(drop_pending_updates=True)
+    print("Bot is running with SQLite database...")
+    app.run_polling()
