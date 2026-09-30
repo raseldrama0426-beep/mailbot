@@ -93,7 +93,7 @@ def get_kbd(is_admin):
         kbd.append([KeyboardButton("⚙️ এডমিন প্যানেল")])
     return ReplyKeyboardMarkup(kbd, resize_keyboard=True)
 
-MENU_REGEX = r'(প্রোফাইল|Profile|প্রডাক্ট কিনুন|Buy Product|সাপোর্ট|Support|এডমিন প্যানেল|Admin Panel|ডিপোজিট|Deposit)'
+MENU_REGEX = r'(প্রোফাইল|profile|প্রডাক্ট|product|সাপোর্ট|support|এডমিন|admin|ডিপোজিট|deposit)'
 
 # ----------------- Core Commands -----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -123,16 +123,18 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_support(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"💬 **আমাদের সাপোর্ট টিম:** {support_user}\n\nযেকোনো সহায়তার জন্য মেসেজ দিন।", parse_mode="Markdown")
 
+# Centralized Handler for all button clicks & text messages
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
+    text = update.message.text.lower()
     user = update.effective_user
     uid = user.id
     
+    # Custom Quantity input processing
     if context.user_data.get('waiting_qty'):
-        if re.search(MENU_REGEX, text, re.IGNORECASE):
+        if re.search(MENU_REGEX, text):
             context.user_data['waiting_qty'] = False
-        elif text.isdigit() and int(text) > 0:
-            context.user_data['qty'] = int(text)
+        elif update.message.text.isdigit() and int(update.message.text) > 0:
+            context.user_data['qty'] = int(update.message.text)
             context.user_data['waiting_qty'] = False
             await send_shop_menu(update.message, context, is_edit=False)
             return
@@ -140,17 +142,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("⚠️ অনুগ্রহ করে সঠিক একটি সংখ্যা লিখুন:")
             return
 
-    if "প্রোফাইল" in text or "profile" in text.lower():
+    # Match based on core keywords (ignores emojis and special symbols)
+    if "প্রোফাইল" in text or "profile" in text:
         await show_profile(update, context)
-    elif "প্রডাক্ট কিনুন" in text or "buy product" in text.lower():
+        
+    elif "প্রডাক্ট" in text or "product" in text or "কিনুন" in text or "buy" in text:
         if not mail_stock:
             await update.message.reply_text("❌ দুঃখিত! বর্তমানে স্টকে কোনো মেইল নেই।")
             return
         context.user_data['qty'] = 1
         await send_shop_menu(update.message, context, is_edit=False)
-    elif "সাপোর্ট" in text or "support" in text.lower():
+        
+    elif "সাপোর্ট" in text or "support" in text:
         await show_support(update, context)
-    elif ("এডমিন প্যানেল" in text or "admin panel" in text.lower()) and uid == ADMIN_ID:
+        
+    elif ("এডমিন" in text or "admin" in text) and uid == ADMIN_ID:
         await admin_panel(update, context)
 
 # ----------------- Shop / Buy System -----------------
@@ -503,7 +509,7 @@ if __name__ == "__main__":
 
     dep = ConversationHandler(
         entry_points=[
-            MessageHandler(filters.Regex(r'.*(ডিপোজিট|Deposit).*'), dep_start)
+            MessageHandler(filters.Regex(r'.*(ডিপোজিট|deposit).*?'), dep_start)
         ],
         states={
             METHOD: [
@@ -525,7 +531,7 @@ if __name__ == "__main__":
         ]
     )
 
-    # Handlers Priority Order
+    # Command Handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("importsheet", import_sheet))
     app.add_handler(CommandHandler("addstock", add_stock))
@@ -533,14 +539,13 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("setprice", set_price))
     app.add_handler(CommandHandler("adminstats", admin_stats))
     app.add_handler(CommandHandler("broadcast", broadcast_command))
-    
-    # Explicit message handlers for Profile and Support
-    app.add_handler(MessageHandler(filters.Regex(r'.*(প্রোফাইল|Profile).*'), show_profile))
-    app.add_handler(MessageHandler(filters.Regex(r'.*(সাপোর্ট|Support).*'), show_support))
 
+    # Conversation and Callbacks
     app.add_handler(dep)
     app.add_handler(CallbackQueryHandler(shop_cb, pattern="^(qty_|confirm_|cancel_)"))
     app.add_handler(CallbackQueryHandler(admin_cb, pattern="^(app_|rej_)"))
+
+    # General Fallback Handler for text & buttons
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print("Bot is running with SQLite database...")
