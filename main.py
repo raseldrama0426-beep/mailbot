@@ -37,21 +37,26 @@ def run_flask():
 threading.Thread(target=run_flask, daemon=True).start()
 
 # ----------------- Configuration Settings -----------------
-BOT_TOKEN = "8803998786:AAETJSRZPzcu6aUI1q914TvA5jcNw3Mrw0A"  # আপনার বটের টোকেন
-ADMIN_ID = 7792142088                                      # এডমিন আইডি
+BOT_TOKEN = "8803998786:AAETJSRZPzcu6aUI1q914TvA5jcNw3Mrw0A"  # Apnar Bot Token
+ADMIN_ID = 7792142088                                      # Admin ID
 
-# পেমেন্ট নম্বরসমূহ
+# Payment Numbers
 BKASH_NUMBER = "01766872406"
 NAGAD_NUMBER = "01821826206"
 ROCKET_NUMBER = "01766872406"
 
-MIN_DEPOSIT = 20.0
-DB_FILE = "bot_database.db"
+# Payment Logo URLs (High Quality Images)
+BKASH_LOGO = "https://i.ibb.co/L5QxZ2k/bkash-logo.jpg"
+NAGAD_LOGO = "https://i.ibb.co/Bsn4R44/nagad-logo.jpg"
+ROCKET_LOGO = "https://i.ibb.co/hK8bQzL/rocket-logo.jpg"
 
-# বটের মূল ডাটা
+MIN_DEPOSIT = 20.0
+DB_FILE = os.path.join(os.getcwd(), "bot_database.db")
+
+# Bot Main Data
 mail_stock = ["kelli.731@piepla.com:rasel24", "michal@piepla.com:rasel24"]
-support_user = "@earnikzone"  # এখানে আপনার সাপোর্ট আইডি দিন
-unit_price = 0.80  # প্রতি মেইলের দাম
+support_user = "@earnikzone"  # Support ID
+unit_price = 0.80  # Per Mail Price
 
 # Conversation States
 METHOD, AMOUNT, PROOF = range(3)
@@ -93,6 +98,14 @@ def get_kbd(is_admin):
         kbd.append([KeyboardButton("⚙️ এডমিন প্যানেল")])
     return ReplyKeyboardMarkup(kbd, resize_keyboard=True)
 
+MENU_BUTTONS = [
+    "👤 প্রোফাইল", "👤 Profile",
+    "💲 প্রডাক্ট কিনুন", "💲 Buy Product", "🛒 Buy Product",
+    "💬 সাপোর্ট", "💬 Support",
+    "⚙️ এডমিন প্যানেল", "⚙ Admin Panel", "⚙️ Admin Panel",
+    "🏦 ডিপোজিট", "🏦 Deposit", "💳 Deposit"
+]
+
 # ----------------- Core Commands -----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
@@ -110,15 +123,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     uid = user.id
     
-    # Custom Quantity Input Handling
     if context.user_data.get('waiting_qty'):
-        if text.isdigit() and int(text) > 0:
+        if text in MENU_BUTTONS:
+            context.user_data['waiting_qty'] = False
+        elif text.isdigit() and int(text) > 0:
             context.user_data['qty'] = int(text)
             context.user_data['waiting_qty'] = False
             await send_shop_menu(update.message, context, is_edit=False)
+            return
         else:
             await update.message.reply_text("⚠️ অনুগ্রহ করে সঠিক একটি সংখ্যা লিখুন:")
-        return
+            return
 
     bal = get_bal(uid)
     if text in ["👤 প্রোফাইল", "👤 Profile"]:
@@ -223,11 +238,11 @@ async def shop_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "cancel_buy":
         await query.edit_message_text("❌ অর্ডার বাতিল করা হয়েছে।")
 
-# ----------------- Deposit System (Step-by-Step Flow) -----------------
+# ----------------- Deposit System (With Official Logos) -----------------
 async def dep_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kbd = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🟢 bKash", callback_data="d_bkash"), InlineKeyboardButton("🔴 Nagad", callback_data="d_nagad")],
-        [InlineKeyboardButton("🟣 Rocket", callback_data="d_rocket")],
+        [InlineKeyboardButton("bKash", callback_data="d_bkash"), InlineKeyboardButton("Nagad", callback_data="d_nagad")],
+        [InlineKeyboardButton("Rocket", callback_data="d_rocket")],
         [InlineKeyboardButton("❌ বাতিল করুন", callback_data="cancel_dep")]
     ])
     msg = (
@@ -251,16 +266,24 @@ async def dep_method(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['dep_m'] = m
     
     method_name = "bKash" if m == "bkash" else ("Nagad" if m == "nagad" else "Rocket")
+    logo_url = BKASH_LOGO if m == "bkash" else (NAGAD_LOGO if m == "nagad" else ROCKET_LOGO)
     
-    await q.edit_message_text(
-        f"✅ আপনি **{method_name}** বেছে নিয়েছেন।\n\n"
-        f"💰 আপনি কত টাকা ডিপোজিট করতে চান? (সর্বনিম্ন {MIN_DEPOSIT:.0f} টাকা எழுதி পাঠান):",
+    await q.message.delete()
+    await context.bot.send_photo(
+        chat_id=q.message.chat_id,
+        photo=logo_url,
+        caption=f"✅ আপনি **{method_name}** বেছে নিয়েছেন।\n\n💰 আপনি কত টাকা ডিপোজিট করতে চান? (সর্বনিম্ন {MIN_DEPOSIT:.0f} টাকা লিখে পাঠান):",
         parse_mode="Markdown"
     )
     return AMOUNT
 
 async def dep_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
+    
+    if text in MENU_BUTTONS:
+        await handle_message(update, context)
+        return ConversationHandler.END
+
     try:
         amt = float(text)
         if amt < MIN_DEPOSIT:
@@ -271,6 +294,7 @@ async def dep_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
         m = context.user_data.get('dep_m')
         num = BKASH_NUMBER if m == "bkash" else (NAGAD_NUMBER if m == "nagad" else ROCKET_NUMBER)
         method_name = "bKash" if m == "bkash" else ("Nagad" if m == "nagad" else "Rocket")
+        logo_url = BKASH_LOGO if m == "bkash" else (NAGAD_LOGO if m == "nagad" else ROCKET_LOGO)
         
         instructions = (
             f"📥 **{method_name} Personal Number:** `{num}`\n"
@@ -280,7 +304,12 @@ async def dep_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"১. উপরের নম্বরে **Send Money** করুন।\n"
             "২. টাকা পাঠানোর পর পাওয়া **Transaction ID (TrxID)** অথবা পেমেন্টের **স্ক্রিনশট** এখানে মেসেজ দিন।"
         )
-        await update.message.reply_text(instructions, parse_mode="Markdown")
+        await context.bot.send_photo(
+            chat_id=update.message.chat_id,
+            photo=logo_url,
+            caption=instructions,
+            parse_mode="Markdown"
+        )
         return PROOF
     except ValueError:
         await update.message.reply_text("❌ অনুগ্রহ করে শুধু সংখ্যার মাধ্যমে টাকার পরিমাণ লিখুন (যেমন: 50):")
@@ -291,14 +320,18 @@ async def dep_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
     a = context.user_data.get('dep_a')
     m = context.user_data.get('dep_m')
     
-    # Validation for TrxID text
+    if update.message and update.message.text:
+        text = update.message.text.strip()
+        if text in MENU_BUTTONS:
+            await handle_message(update, context)
+            return ConversationHandler.END
+
     if not update.message.photo:
         trx_text = update.message.text.strip()
-        # TrxID সাধারণত অক্ষর ও সংখ্যার মিশ্রণ হয় এবং অন্তত ৮-১২ ক্যারেক্টার হয়
         if len(trx_text) < 6 or " " in trx_text or len(trx_text) > 20:
             await update.message.reply_text(
                 "❌ **ভুল Transaction ID!**\n\n"
-                "অনুগ্রহ করে পেমেন্ট শেষ করার পর প্রাপ্ত সঠিক TrxID (যেমন: `3A4B5C6D7E`) অথবা পেমেন্টের স্ক্রিনশট পাঠাতুন।"
+                "অনুগ্রহ করে পেমেন্ট শেষ করার পর প্রাপ্ত সঠিক TrxID (যেমন: `3A4B5C6D7E`) অথবা পেমেন্টের স্ক্রিনশট পাঠান।"
             )
             return PROOF
 
@@ -370,7 +403,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "💰 `/addbalance USER_ID AMOUNT` - ইউজারের ব্যালেন্স যোগ/বিয়োগ করুন\n"
             "🏷 `/setprice AMOUNT` - প্রতি মেইলের দাম নির্ধারণ করুন\n"
             "📊 `/adminstats` - বর্তমান স্টক ও হিসেব দেখুন\n"
-            "📢 `/broadcast বার্তা` - সকল ইউজারকে নোটিশ পাঠাতুন"
+            "📢 `/broadcast বার্তা` - সকল ইউজারকে নোটিশ পাঠান"
         )
         await update.message.reply_text(msg, parse_mode="Markdown")
 
@@ -479,7 +512,6 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ----------------- Set Bot Commands Menu -----------------
 async def post_init(application):
-    # টেলিগ্রাম চ্যাটের ৩-লাইনের মেনুতে কমান্ড সেট করবে
     commands = [
         BotCommand("start", "বট পুনরায় শুরু করুন")
     ]
@@ -518,5 +550,5 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(admin_cb, pattern="^(app_|rej_)"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    print("Bot is running with SQLite database...")
+    print("Bot is running with SQLite database & Payment Logos...")
     app.run_polling()
